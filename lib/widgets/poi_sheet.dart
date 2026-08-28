@@ -16,37 +16,87 @@ import 'sheet_chrome.dart';
 class PoiSheet extends StatefulWidget {
   final LatLng center;
   final ScrollController scrollController;
+  final void Function(double lat, double lng)? onSelectLocation;
+  final VoidCallback? onClose;
+  final VoidCallback? onSaved;
 
   const PoiSheet({
     super.key,
     required this.center,
     required this.scrollController,
+    this.onSelectLocation,
+    this.onClose,
+    this.onSaved,
   });
 
   @override
-  State<PoiSheet> createState() => _PoiSheetState();
+  State<PoiSheet> createState() => PoiSheetState();
 }
 
-class _PoiSheetState extends State<PoiSheet> {
+class PoiSheetState extends State<PoiSheet> {
   int _step = 0; // 0 = 列表，1 = 填写
   String _name = '';
   String _addr = '';
+  String _city = '';
   double _lat = 0;
   double _lng = 0;
+  late LatLng _currentCenter;
   final _formKey = GlobalKey<CollectionFormFieldsState>();
+  final _searchController = TextEditingController();
   List<Poi> _pois = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _currentCenter = widget.center;
     _loadPois();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPois() async {
     final result = await PoiSearchService.searchNearby(
-      widget.center.latitude,
-      widget.center.longitude,
+      _currentCenter.latitude,
+      _currentCenter.longitude,
+    );
+    if (mounted) {
+      setState(() {
+        _pois = result;
+        _loading = false;
+      });
+    }
+  }
+
+  /// 地图被拖动后，以新中心重新搜索附近地点（仅列表步骤生效）。
+  Future<void> reloadNearby(LatLng center) async {
+    if (_step != 0) return;
+    _currentCenter = center;
+    final result =
+        await PoiSearchService.searchNearby(center.latitude, center.longitude);
+    if (mounted) {
+      setState(() {
+        _pois = result;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _onSearch(String keyword) async {
+    final kw = keyword.trim();
+    if (kw.isEmpty) {
+      _loadPois(); // 清空关键词 → 回到附近地点
+      return;
+    }
+    setState(() => _loading = true);
+    final result = await PoiSearchService.searchByName(
+      kw,
+      _currentCenter.latitude,
+      _currentCenter.longitude,
     );
     if (mounted) {
       setState(() {
@@ -57,9 +107,12 @@ class _PoiSheetState extends State<PoiSheet> {
   }
 
   void _select(Poi poi) {
+    // 通知地图移动到选中地点
+    widget.onSelectLocation?.call(poi.latitude, poi.longitude);
     setState(() {
       _name = poi.name;
       _addr = poi.addr;
+      _city = poi.city;
       _lat = poi.latitude;
       _lng = poi.longitude;
       _step = 1;
@@ -69,11 +122,15 @@ class _PoiSheetState extends State<PoiSheet> {
   Future<void> _manualInput() async {
     final name = await _promptName();
     if (name == null || name.isEmpty) return;
+    final city = await PoiSearchService.reverseGeocodeCity(
+        _currentCenter.latitude, _currentCenter.longitude);
+    if (!mounted) return;
     setState(() {
       _name = name;
       _addr = '手动标记';
-      _lat = widget.center.latitude;
-      _lng = widget.center.longitude;
+      _city = city ?? '';
+      _lat = _currentCenter.latitude;
+      _lng = _currentCenter.longitude;
       _step = 1;
     });
   }
@@ -114,6 +171,7 @@ class _PoiSheetState extends State<PoiSheet> {
       name: _name,
       latitude: _lat,
       longitude: _lng,
+      city: _city.isEmpty ? null : _city,
       type: 'custom',
       createdAt: now,
     );
@@ -131,7 +189,7 @@ class _PoiSheetState extends State<PoiSheet> {
     final ok = await context.read<CollectionProvider>().save(place, collection);
     if (!mounted) return;
     if (ok) {
-      Navigator.pop(context, true);
+      widget.onSaved?.call();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('保存失败，请检查存储空间后重试')),
@@ -168,7 +226,7 @@ class _PoiSheetState extends State<PoiSheet> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => Navigator.pop(context),
+                    onTap: () => widget.onClose?.call(),
                     child: const Padding(
                       padding: EdgeInsets.all(4),
                       child: Text('×',
@@ -178,19 +236,23 @@ class _PoiSheetState extends State<PoiSheet> {
                 ],
               ),
               const SizedBox(height: 10),
-              // 搜索框（P0 占位，接入 Foursquare 后启用）
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-                decoration: BoxDecoration(
-                  color: AppColors.bg,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Row(
-                  children: [
-                    const Text('🔍', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Text('搜索地点名称...', style: AppText.caption),
-                  ],
+              TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                onSubmitted: _onSearch,
+                decoration: InputDecoration(
+                  hintText: '搜索地点名称...',
+                  prefixIcon: const Icon(Icons.search,
+                      size: 18, color: AppColors.stone),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.bg,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(11),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ],
@@ -306,8 +368,10 @@ class _PoiItem extends StatelessWidget {
                 ],
               ),
             ),
-            Text(poi.distance,
-                style: AppText.chip.copyWith(color: AppColors.terracotta)),
+            Text(
+              poi.distance.isNotEmpty ? poi.distance : poi.city,
+              style: AppText.chip.copyWith(color: AppColors.terracotta),
+            ),
           ],
         ),
       ),

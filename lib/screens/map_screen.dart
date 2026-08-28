@@ -36,6 +36,8 @@ class _MapScreenState extends State<MapScreen> {
   LatLng _center = kDefaultCenter;
   double _zoom = kDefaultZoom;
   String? _cityName;
+  bool _showSheet = false;
+  final GlobalKey<PoiSheetState> _poiSheetKey = GlobalKey<PoiSheetState>();
 
   @override
   void initState() {
@@ -125,30 +127,12 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Future<void> _openCollectionFlow() async {
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.5,
-        maxChildSize: 0.75,
-        expand: false,
-        builder: (context, scrollController) => PoiSheet(
-          center: _center,
-          scrollController: scrollController,
-        ),
-      ),
-    );
-    if (saved == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✓ 已收藏'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+  void _onSelectLocation(double lat, double lng) {
+    _mapController.move(LatLng(lat, lng), 15);
+  }
+
+  void _openCollectionFlow() {
+    setState(() => _showSheet = true);
   }
 
   Future<void> _openDetail(CollectionView view) async {
@@ -186,7 +170,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    return clusters.map((c) {
+    final markers = clusters.map((c) {
       if (c.views.length == 1) {
         final v = c.views.first;
         return Marker(
@@ -207,6 +191,8 @@ class _MapScreenState extends State<MapScreen> {
         child: _clusterBubble(c.views.length),
       );
     }).toList();
+
+    return markers;
   }
 
   Widget _clusterBubble(int count) {
@@ -270,7 +256,11 @@ class _MapScreenState extends State<MapScreen> {
                   setState(() {
                     _visibleBounds = _mapController.camera.visibleBounds;
                     _zoom = _mapController.camera.zoom;
+                    _center = _mapController.camera.center;
                   });
+                  // 地图拖动后，以地图中心为准刷新附近地点
+                  _poiSheetKey.currentState
+                      ?.reloadNearby(_mapController.camera.center);
                 }
               },
             ),
@@ -311,6 +301,46 @@ class _MapScreenState extends State<MapScreen> {
             Positioned.fill(
               child: IgnorePointer(
                 child: EmptyState(),
+              ),
+            ),
+
+          // ── 中心钉子（拖图模式） ──
+          if (_showSheet)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Center(
+                  child: Transform.translate(
+                    offset: const Offset(0, -18),
+                    child: const Text('📍', style: TextStyle(fontSize: 30)),
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 收藏弹层（非模态，地图可拖动） ──
+          if (_showSheet)
+            Positioned.fill(
+              child: DraggableScrollableSheet(
+                initialChildSize: 0.5,
+                minChildSize: 0.5,
+                maxChildSize: 0.75,
+                expand: false,
+                builder: (context, scrollController) => PoiSheet(
+                  key: _poiSheetKey,
+                  center: _center,
+                  scrollController: scrollController,
+                  onSelectLocation: _onSelectLocation,
+                  onClose: () => setState(() => _showSheet = false),
+                  onSaved: () {
+                    setState(() => _showSheet = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✓ 已收藏'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
 

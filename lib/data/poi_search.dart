@@ -9,6 +9,7 @@ class Poi {
   final String name;
   final PrimaryTag tag;
   final String addr;
+  final String city;
   final String distance;
   final double latitude;
   final double longitude;
@@ -17,6 +18,7 @@ class Poi {
     required this.name,
     required this.tag,
     required this.addr,
+    this.city = '',
     required this.distance,
     required this.latitude,
     required this.longitude,
@@ -25,19 +27,40 @@ class Poi {
 
 /// 高德周边搜索（真实附近地点，按距离排序）。
 class PoiSearchService {
-  static Future<List<Poi>> searchNearby(double lat, double lng) async {
+  /// 周边搜索：当前位置附近的真实地点，按距离排序。
+  static Future<List<Poi>> searchNearby(double lat, double lng) {
+    return _search(
+      'https://restapi.amap.com/v3/place/around'
+      '?key=${AppConfig.amapWebApiKey}'
+      '&location=$lng,$lat'
+      '&radius=1000'
+      '&sortrule=distance'
+      '&offset=10'
+      '&page=1',
+      lat,
+      lng,
+    );
+  }
+
+  /// 关键词搜索：全国范围按名称搜索（不限制当前位置，便于异地收藏、以后去）。
+  static Future<List<Poi>> searchByName(String keyword, double lat, double lng) {
+    final kw = Uri.encodeComponent(keyword);
+    return _search(
+      'https://restapi.amap.com/v3/place/text'
+      '?key=${AppConfig.amapWebApiKey}'
+      '&keywords=$kw'
+      '&offset=20'
+      '&page=1',
+      lat,
+      lng,
+    );
+  }
+
+  static Future<List<Poi>> _search(String url, double lat, double lng) async {
     try {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 8);
-      final req = await client.getUrl(Uri.parse(
-        'https://restapi.amap.com/v3/place/around'
-        '?key=${AppConfig.amapWebApiKey}'
-        '&location=$lng,$lat'
-        '&radius=1000'
-        '&sortrule=distance'
-        '&offset=10'
-        '&page=1',
-      ));
+      final req = await client.getUrl(Uri.parse(url));
       final res = await req.close();
       final body = await res.transform(utf8.decoder).join();
       final decoded = jsonDecode(body) as Map<String, dynamic>;
@@ -53,7 +76,8 @@ class PoiSearchService {
               name: name,
               tag: _tagFromAmapType(m['type'] as String? ?? ''),
               addr: _readStr(m['address']),
-              distance: _formatDistance(m['distance'] as String? ?? ''),
+              city: _readStr(m['cityname']),
+              distance: _formatDistance(_readStr(m['distance'])),
               latitude: double.tryParse(loc.length > 1 ? loc[1] : '') ?? lat,
               longitude: double.tryParse(loc.isNotEmpty ? loc[0] : '') ?? lng,
             );
@@ -71,8 +95,33 @@ class PoiSearchService {
     return '';
   }
 
+  /// 逆地理编码：坐标转城市名（手动收藏时用，返回 city 或 province）。
+  static Future<String?> reverseGeocodeCity(double lat, double lng) async {
+    try {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 8);
+      final req = await client.getUrl(Uri.parse(
+        'https://restapi.amap.com/v3/geocode/regeo'
+        '?key=${AppConfig.amapWebApiKey}&location=$lng,$lat',
+      ));
+      final res = await req.close();
+      final body = await res.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final component = (decoded['regeocode']
+              as Map<String, dynamic>?)?['addressComponent']
+          as Map<String, dynamic>?;
+      final province = _readStr(component?['province']);
+      final city = _readStr(component?['city']);
+      if (city.isNotEmpty) return city;
+      return province.isNotEmpty ? province : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static String _formatDistance(String meters) {
     final m = int.tryParse(meters) ?? 0;
+    if (m <= 0) return ''; // 全国搜索无距离时返回空
     if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)}km';
     return '${m}m';
   }
