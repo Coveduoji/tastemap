@@ -46,3 +46,6 @@ app.*.map.json
 
 # Flutter 工具崩溃日志
 *.log
+
+# 本地密钥配置（不入库；复制 config.example.dart 为 config.dart 并填写）
+lib/config.dart

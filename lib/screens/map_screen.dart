@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,8 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../config.dart';
 import '../models/collection_view.dart';
-import '../models/primary_tag.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import '../theme/typography.dart';
@@ -17,7 +19,7 @@ import '../widgets/pin_marker.dart';
 import '../widgets/poi_sheet.dart';
 import 'profile_screen.dart';
 
-const LatLng kDefaultCenter = LatLng(35.6580, 139.7016); // 东京涩谷
+const LatLng kDefaultCenter = LatLng(39.9092, 116.3974); // 北京（高德国内瓦片覆盖）
 const double kDefaultZoom = 13.5;
 
 /// 地图首页：全屏地图 + 浮动 UI（无底部 Tab，DDR-01）。
@@ -33,6 +35,7 @@ class _MapScreenState extends State<MapScreen> {
   LatLngBounds? _visibleBounds;
   LatLng _center = kDefaultCenter;
   double _zoom = kDefaultZoom;
+  String? _cityName;
 
   @override
   void initState() {
@@ -59,10 +62,13 @@ class _MapScreenState extends State<MapScreen> {
         return false;
       }
 
-      final pos = await Geolocator.getCurrentPosition();
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: AndroidSettings(forceLocationManager: true),
+      );
       if (!mounted) return false;
       setState(() => _center = LatLng(pos.latitude, pos.longitude));
       _mapController.move(_center, kDefaultZoom);
+      _reverseGeocode(LatLng(pos.latitude, pos.longitude));
       return true;
     } catch (_) {
       // 定位失败：保持默认坐标，不阻塞
@@ -75,9 +81,47 @@ class _MapScreenState extends State<MapScreen> {
     await _requestLocation(notify: true);
   }
 
+  Future<void> _reverseGeocode(LatLng pos) async {
+    try {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 8);
+      final req = await client.getUrl(Uri.parse(
+        'https://restapi.amap.com/v3/geocode/regeo'
+        '?key=${AppConfig.amapWebApiKey}'
+        '&location=${pos.longitude},${pos.latitude}',
+      ));
+      final res = await req.close();
+      final body = await res.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final component = (decoded['regeocode']
+              as Map<String, dynamic>?)?['addressComponent']
+          as Map<String, dynamic>?;
+      // 高德字段可能是字符串、空数组 []（直辖市 city）或 null，需健壮解析
+      String? readStr(dynamic v) {
+        if (v is String && v.isNotEmpty) return v;
+        if (v is List && v.isNotEmpty) return v.first.toString();
+        return null;
+      }
+
+      final province = readStr(component?['province']);
+      final city = readStr(component?['city']);
+      final district = readStr(component?['district']);
+      final base = city ?? province; // 直辖市 city 为空时回退到 province
+      if (base != null && mounted) {
+        final label = (district != null && district != base)
+            ? '$base · $district'
+            : base;
+        setState(() => _cityName = label);
+      }
+      client.close();
+    } catch (_) {
+      // 逆地理失败：保持「当前位置」占位
+    }
+  }
+
   void _showLocationGuide() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('未获取定位，当前显示默认位置（东京）')),
+      const SnackBar(content: Text('未获取定位，当前显示默认位置（北京）')),
     );
   }
 
@@ -86,7 +130,16 @@ class _MapScreenState extends State<MapScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => PoiSheet(center: _center),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.5,
+        maxChildSize: 0.75,
+        expand: false,
+        builder: (context, scrollController) => PoiSheet(
+          center: _center,
+          scrollController: scrollController,
+        ),
+      ),
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -138,9 +191,9 @@ class _MapScreenState extends State<MapScreen> {
         final v = c.views.first;
         return Marker(
           point: LatLng(v.latitude, v.longitude),
-          width: 44,
-          height: 52,
-          alignment: Alignment.topCenter,
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
           child: GestureDetector(
             onTap: () => _openDetail(v),
             child: PinMarker(tag: v.tag, visited: v.visited),
@@ -223,7 +276,9 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate:
+                    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}',
+                subdomains: const ['1', '2', '3', '4'],
                 userAgentPackageName: 'com.tastemap.tastemap',
               ),
               MarkerLayer(markers: _buildMarkers(views)),
@@ -247,14 +302,6 @@ class _MapScreenState extends State<MapScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: _FilterRow(
-                    selected: provider.selectedTag,
-                    onSelect: provider.setTag,
-                  ),
-                ),
               ],
             ),
           ),
@@ -263,7 +310,7 @@ class _MapScreenState extends State<MapScreen> {
           if (views.isEmpty)
             Positioned.fill(
               child: IgnorePointer(
-                child: EmptyState(onAdd: _openCollectionFlow),
+                child: EmptyState(),
               ),
             ),
 
@@ -344,7 +391,7 @@ class _MapScreenState extends State<MapScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Tokyo', style: AppText.cityName),
+              Text(_cityName ?? '当前位置', style: AppText.cityName),
               Text('我的品味地图', style: AppText.caption),
             ],
           ),
@@ -411,57 +458,5 @@ class _Cluster {
     final dLat = lat - v.latitude;
     final dLng = (lng - v.longitude) * math.cos(lat * math.pi / 180);
     return math.sqrt(dLat * dLat + dLng * dLng);
-  }
-}
-
-class _FilterRow extends StatelessWidget {
-  final PrimaryTag? selected;
-  final ValueChanged<PrimaryTag?> onSelect;
-
-  const _FilterRow({required this.selected, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _chip('全部', selected == null, () => onSelect(null)),
-          const SizedBox(width: 6),
-          ...PrimaryTag.values.map((t) => Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: _chip(
-                  '${t.emoji} ${t.label}',
-                  selected == t,
-                  () => onSelect(t),
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(String label, bool active, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-        decoration: BoxDecoration(
-          color: active
-              ? AppColors.ink
-              : AppColors.warmWhite.withValues(alpha: 0.88),
-          borderRadius: BorderRadius.circular(18),
-          border: active
-              ? null
-              : Border.all(color: AppColors.ink.withValues(alpha: 0.1)),
-        ),
-        child: Text(
-          label,
-          style: AppText.chip.copyWith(
-            color: active ? AppColors.warmWhite : AppColors.ink,
-          ),
-        ),
-      ),
-    );
   }
 }

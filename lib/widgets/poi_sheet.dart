@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import '../data/mock_pois.dart';
+import '../data/poi_search.dart';
 import '../models/collection.dart';
 import '../models/place.dart';
 import '../state/collection_provider.dart';
@@ -15,8 +15,13 @@ import 'sheet_chrome.dart';
 /// 收藏流程 Sheet：Step 1 附近地点列表 → Step 2 填写表单（共享同一容器，DDR-03）。
 class PoiSheet extends StatefulWidget {
   final LatLng center;
+  final ScrollController scrollController;
 
-  const PoiSheet({super.key, required this.center});
+  const PoiSheet({
+    super.key,
+    required this.center,
+    required this.scrollController,
+  });
 
   @override
   State<PoiSheet> createState() => _PoiSheetState();
@@ -29,8 +34,29 @@ class _PoiSheetState extends State<PoiSheet> {
   double _lat = 0;
   double _lng = 0;
   final _formKey = GlobalKey<CollectionFormFieldsState>();
+  List<Poi> _pois = [];
+  bool _loading = true;
 
-  void _select(MockPoi poi) {
+  @override
+  void initState() {
+    super.initState();
+    _loadPois();
+  }
+
+  Future<void> _loadPois() async {
+    final result = await PoiSearchService.searchNearby(
+      widget.center.latitude,
+      widget.center.longitude,
+    );
+    if (mounted) {
+      setState(() {
+        _pois = result;
+        _loading = false;
+      });
+    }
+  }
+
+  void _select(Poi poi) {
     setState(() {
       _name = poi.name;
       _addr = poi.addr;
@@ -122,7 +148,6 @@ class _PoiSheetState extends State<PoiSheet> {
 
   Widget _buildList() {
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
         const SheetHandle(),
         Padding(
@@ -173,15 +198,25 @@ class _PoiSheetState extends State<PoiSheet> {
         ),
         const SizedBox(height: 8),
         const Divider(height: 1, color: AppColors.divider),
-        Flexible(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: mockPois.length,
-            itemBuilder: (_, i) => _PoiItem(
-              poi: mockPois[i],
-              onTap: () => _select(mockPois[i]),
-            ),
-          ),
+        Expanded(
+          child: _loading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : _pois.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: Text('附近暂无搜索结果')),
+                    )
+                  : ListView.builder(
+                      controller: widget.scrollController,
+                      itemCount: _pois.length,
+                      itemBuilder: (_, i) => _PoiItem(
+                        poi: _pois[i],
+                        onTap: () => _select(_pois[i]),
+                      ),
+                    ),
         ),
         _ManualEntry(onTap: _manualInput),
       ],
@@ -190,6 +225,7 @@ class _PoiSheetState extends State<PoiSheet> {
 
   Widget _buildForm() {
     return SingleChildScrollView(
+      controller: widget.scrollController,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -233,7 +269,7 @@ class _PoiSheetState extends State<PoiSheet> {
 }
 
 class _PoiItem extends StatelessWidget {
-  final MockPoi poi;
+  final Poi poi;
   final VoidCallback onTap;
 
   const _PoiItem({required this.poi, required this.onTap});
