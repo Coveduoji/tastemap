@@ -26,7 +26,7 @@ class CollectionListScreen extends StatelessWidget {
     final grouped = _groupByCity(all);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0EDE8),
+      backgroundColor: AppColors.warmWhite,
       body: SafeArea(
         child: Column(
           children: [
@@ -83,7 +83,7 @@ class CollectionListScreen extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text('${views.length} 个',
-                  style: AppText.chip.copyWith(color: AppColors.terracotta)),
+                  style: AppText.chip.copyWith(color: AppColors.accent)),
             ],
           ),
           children: views.map((v) => _tile(context, v)).toList(),
@@ -112,7 +112,7 @@ class CollectionListScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(11),
               ),
               alignment: Alignment.center,
-              child: Text(v.tag.emoji, style: const TextStyle(fontSize: 20)),
+              child: Icon(v.tag.icon, size: 20, color: AppColors.ink),
             ),
             const SizedBox(width: 11),
             Expanded(

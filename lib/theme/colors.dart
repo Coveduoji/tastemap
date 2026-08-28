@@ -1,41 +1,28 @@
 import 'package:flutter/material.dart';
 
 /// TasteMap 设计令牌 —— 色彩规范（唯一权威来源，界面不得硬编码色值）。
-/// 来源：TasteMap_Design.md §01 设计系统。
+/// 白底 + 单一强调色（朱红）+ 大色块的视觉方向：分类色退场为中性图标层，
+/// 颜色只留给需要被看见的东西——按钮、FAB、选中态。
 class AppColors {
   AppColors._();
 
   // ── 主色 ──
-  static const Color ink = Color(0xFF2D2A26); // 主文字 / FAB / 主 CTA
-  static const Color warmWhite = Color(0xFFF5F0E8); // 页面背景 / 卡片
-  static const Color terracotta = Color(0xFFB8906A); // 强调色 / 高亮
-  static const Color stone = Color(0xFF8C8880); // 次要文字
-
-  // ── 分类强调色（饱和，用于文字/深色强调） ──
-  static const Color food = Color(0xFFE07040); // 🍜 美食
-  static const Color coffee = Color(0xFFA07850); // ☕ 咖啡
-  static const Color hotel = Color(0xFF4878CC); // 🏨 酒店
-  static const Color sight = Color(0xFF3A9C58); // 📷 景点
-  static const Color bar = Color(0xFF9048B8); // 🍸 酒吧
-
-  // ── Pin 气泡底色（浅色调） ──
-  static const Color foodBubble = Color(0xFFFFDFC8);
-  static const Color coffeeBubble = Color(0xFFEDE0D0);
-  static const Color hotelBubble = Color(0xFFD8E8FC);
-  static const Color sightBubble = Color(0xFFD8F0E0);
-  static const Color barBubble = Color(0xFFEDD8F4);
+  static const Color ink = Color(0xFF14151A); // 主文字 / 次要图标
+  static const Color warmWhite = Color(0xFFFFFFFF); // 页面背景 / 卡片 / 按钮文字
+  static const Color accent = Color(0xFFE8402A); // 朱红：唯一强调色 / FAB / 主 CTA / 选中态
+  static const Color accentDeep = Color(0xFFA62A18); // 强调色深色（按压态）
+  static const Color accentSoft = Color(0xFFFDE7E2); // 强调色浅底（选中态背景/徽标底）
+  static const Color stone = Color(0xFF797D86); // 次要文字
 
   // ── 语义色 ──
   static const Color danger = Color(0xFFC04040); // 删除（非纯红）
   static const Color dangerBg = Color(0xFFFDDCD8);
   static const Color visited = Color(0xFF3A9C58); // 已打卡
-  static const Color pending = Color(0xFFB8906A); // 待打卡
-  static const Color locationBlue = Color(0xFF4878CC); // 定位点
+  static const Color pending = Color(0xFFA6ABB4); // 待打卡（中性灰，非分类色）
 
   // ── 背景 / 描边 ──
-  static const Color bg = Color(0xFFEDEAE4); // 画布背景（设计稿 body 背景）
-  static const Color mapBg = Color(0xFFE9E5DC); // 地图占位底色
-  static const Color divider = Color(0xFFE8E2DA);
-  static const Color dividerLight = Color(0xFFECEAE3);
-  static const Color cardBorder = Color(0xFFE0DAD0);
+  static const Color bg = Color(0xFFF3F4F6); // 输入框 / 占位块 / 中性面（非分类色）
+  static const Color divider = Color(0xFFEBEBEE);
+  static const Color dividerLight = Color(0xFFF1F1F3);
+  static const Color cardBorder = Color(0xFFE7E7EA);
 }

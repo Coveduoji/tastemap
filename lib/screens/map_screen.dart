@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -37,6 +38,7 @@ class _MapScreenState extends State<MapScreen> {
   double _zoom = kDefaultZoom;
   String? _cityName;
   bool _showSheet = false;
+  bool _startManual = false;
   final GlobalKey<PoiSheetState> _poiSheetKey = GlobalKey<PoiSheetState>();
 
   @override
@@ -132,7 +134,24 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _openCollectionFlow() {
-    setState(() => _showSheet = true);
+    setState(() {
+      _showSheet = true;
+      _startManual = false;
+    });
+  }
+
+  /// 长按「+」：跳过附近地点列表，直接对当前钉子位置（拖图后的地图中心）命名。
+  /// 用于地图上没有对应 POI 的位置，如秋千、拍照机位——先拖图把钉子放准，再长按命名。
+  void _onFabLongPress() {
+    HapticFeedback.mediumImpact();
+    if (_showSheet) {
+      _poiSheetKey.currentState?.startManualEntry();
+    } else {
+      setState(() {
+        _showSheet = true;
+        _startManual = true;
+      });
+    }
   }
 
   Future<void> _openDetail(CollectionView view) async {
@@ -202,11 +221,14 @@ class _MapScreenState extends State<MapScreen> {
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-          color: AppColors.ink,
+          color: AppColors.accent,
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.warmWhite, width: 2.5),
-          boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2)),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.accent.withValues(alpha: 0.35),
+                blurRadius: 8,
+                offset: const Offset(0, 3)),
           ],
         ),
         alignment: Alignment.center,
@@ -281,13 +303,13 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 if (nearby > 0) _nearbyBadge(nearby),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                   child: Row(
                     children: [
                       Expanded(child: _cityPill()),
-                      const SizedBox(width: 8),
-                      _iconBtn('🔍', _openCollectionFlow),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
+                      _iconBtn(Icons.search, _openCollectionFlow),
+                      const SizedBox(width: 10),
                       _avatarBtn(_openProfile),
                     ],
                   ),
@@ -311,7 +333,7 @@ class _MapScreenState extends State<MapScreen> {
                 child: Center(
                   child: Transform.translate(
                     offset: const Offset(0, -18),
-                    child: const Text('📍', style: TextStyle(fontSize: 30)),
+                    child: const Icon(Icons.location_on, size: 34, color: AppColors.accent),
                   ),
                 ),
               ),
@@ -329,6 +351,7 @@ class _MapScreenState extends State<MapScreen> {
                   key: _poiSheetKey,
                   center: _center,
                   scrollController: scrollController,
+                  startManual: _startManual,
                   onSelectLocation: _onSelectLocation,
                   onClose: () => setState(() => _showSheet = false),
                   onSaved: () {
@@ -346,44 +369,39 @@ class _MapScreenState extends State<MapScreen> {
 
           // ── 定位按钮 ──
           Positioned(
-            right: 14,
-            bottom: 90,
-            child: _iconBtn('◎', _locateMe),
+            right: 16,
+            bottom: 112,
+            child: _iconBtn(Icons.my_location, _locateMe),
           ),
 
           // ── FAB ──
           Positioned(
             left: 0,
             right: 0,
-            bottom: 24,
+            bottom: 112,
             child: Center(
               child: GestureDetector(
                 onTap: _openCollectionFlow,
-                onLongPress: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('长按标记（拖图模式）将在后续版本上线')),
-                ),
+                onLongPress: _onFabLongPress,
                 child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: const BoxDecoration(
-                    color: AppColors.ink,
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 16,
-                        offset: Offset(0, 4),
+                        color: AppColors.accent.withValues(alpha: 0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    '+',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w300,
-                      color: AppColors.warmWhite,
-                    ),
+                  child: const Icon(
+                    Icons.add,
+                    size: 30,
+                    color: AppColors.warmWhite,
                   ),
                 ),
               ),
@@ -396,10 +414,10 @@ class _MapScreenState extends State<MapScreen> {
 
   Widget _nearbyBadge(int count) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: const BoxDecoration(
         color: AppColors.ink,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(10)),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
       ),
       child: Text(
         '视野内 · $count 个收藏',
@@ -410,11 +428,18 @@ class _MapScreenState extends State<MapScreen> {
 
   Widget _cityPill() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
       decoration: BoxDecoration(
-        color: AppColors.warmWhite.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.ink.withValues(alpha: 0.1)),
+        color: AppColors.warmWhite.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.ink.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.ink.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -426,25 +451,32 @@ class _MapScreenState extends State<MapScreen> {
             ],
           ),
           const Spacer(),
-          const Text('▾', style: TextStyle(color: AppColors.stone, fontSize: 10)),
+          const Text('▾', style: TextStyle(color: AppColors.stone, fontSize: 11)),
         ],
       ),
     );
   }
 
-  Widget _iconBtn(String icon, VoidCallback onTap) {
+  Widget _iconBtn(IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 36,
+        width: 42,
+        height: 42,
         decoration: BoxDecoration(
-          color: AppColors.warmWhite.withValues(alpha: 0.92),
+          color: AppColors.warmWhite.withValues(alpha: 0.95),
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.ink.withValues(alpha: 0.1)),
+          border: Border.all(color: AppColors.ink.withValues(alpha: 0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.ink.withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         alignment: Alignment.center,
-        child: Text(icon, style: const TextStyle(fontSize: 15)),
+        child: Icon(icon, size: 19, color: AppColors.ink),
       ),
     );
   }
@@ -453,15 +485,22 @@ class _MapScreenState extends State<MapScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 36,
+        width: 42,
+        height: 42,
         decoration: BoxDecoration(
-          color: const Color(0xFFC4A882),
+          color: AppColors.ink,
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.warmWhite, width: 2),
+          border: Border.all(color: AppColors.warmWhite, width: 2.5),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.ink.withValues(alpha: 0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         alignment: Alignment.center,
-        child: const Text('🐕', style: TextStyle(fontSize: 15)),
+        child: const Icon(Icons.person, size: 17, color: AppColors.warmWhite),
       ),
     );
   }

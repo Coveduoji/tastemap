@@ -41,7 +41,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.warmWhite,
       body: SafeArea(
         child: Column(
           children: [
@@ -62,25 +62,25 @@ class SettingsScreen extends StatelessWidget {
               child: ListView(
                 children: [
                   _label('数据与同步'),
-                  _item('☁️', const Color(0xFFEAF0FB), '坚果云同步', 'WebDAV 备份 / 恢复',
+                  _item(Icons.cloud_sync, AppColors.bg, '坚果云同步', 'WebDAV 备份 / 恢复',
                       () => Navigator.push(context,
                           MaterialPageRoute(builder: (_) => const WebDavScreen()))),
-                  _item('📤', const Color(0xFFEAF6ED), '导出数据', '导出为 JSON / CSV'),
+                  _item(Icons.file_upload, AppColors.bg, '导出数据', '导出为 JSON / CSV'),
                   _label('应用'),
-                  _item('🗺', const Color(0xFFFFF0E8), '地图设置', '默认地图类型 · 缓存'),
-                  _item('🔔', const Color(0xFFF5EFE6), '通知', '附近收藏提醒'),
+                  _item(Icons.map, AppColors.bg, '地图设置', '默认地图类型 · 缓存'),
+                  _item(Icons.notifications_none, AppColors.bg, '通知', '附近收藏提醒'),
                   _label('关于'),
-                  _item('ℹ️', const Color(0xFFF0EDE8), '版本信息', 'TasteMap v1.0.0'),
-                  _item('💬', const Color(0xFFF0EDE8), '和开发者聊聊', '反馈问题 · 提建议'),
-                  _item('📖', const Color(0xFFF0EDE8), '使用说明', '长按 + · 同步配置'),
+                  _item(Icons.info_outline, AppColors.bg, '版本信息', 'TasteMap v1.0.0'),
+                  _item(Icons.chat_bubble_outline, AppColors.bg, '和开发者聊聊', '反馈问题 · 提建议'),
+                  _item(Icons.menu_book, AppColors.bg, '使用说明', '长按 + · 同步配置'),
                   _label('数据管理'),
-                  _dangerItem('🗑', '清除所有收藏', '操作不可逆，请谨慎',
+                  _dangerItem(Icons.delete_outline, '清除所有收藏', '操作不可逆，请谨慎',
                       () => _clearAll(context)),
                   const SizedBox(height: 24),
                   Text(
                     'TasteMap · v1.0.0 · 把你喜欢的地方，钉在地图上',
                     textAlign: TextAlign.center,
-                    style: AppText.caption.copyWith(color: const Color(0xFFC5C0B8)),
+                    style: AppText.caption.copyWith(color: AppColors.stone),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -99,7 +99,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _item(String emoji, Color bg, String title, String subtitle,
+  Widget _item(IconData icon, Color bg, String title, String subtitle,
       [VoidCallback? onTap]) {
     return InkWell(
       onTap: onTap,
@@ -115,7 +115,7 @@ class SettingsScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(11),
               ),
               alignment: Alignment.center,
-              child: Text(emoji, style: const TextStyle(fontSize: 17)),
+              child: Icon(icon, size: 17, color: AppColors.ink),
             ),
             const SizedBox(width: 13),
             Expanded(
@@ -136,7 +136,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _dangerItem(String emoji, String title, String subtitle, VoidCallback onTap) {
+  Widget _dangerItem(IconData icon, String title, String subtitle, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -151,7 +151,7 @@ class SettingsScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(11),
               ),
               alignment: Alignment.center,
-              child: Text(emoji, style: const TextStyle(fontSize: 17)),
+              child: Icon(icon, size: 17, color: AppColors.danger),
             ),
             const SizedBox(width: 13),
             Expanded(

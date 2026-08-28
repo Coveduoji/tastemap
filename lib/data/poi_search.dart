@@ -95,8 +95,9 @@ class PoiSearchService {
     return '';
   }
 
-  /// 逆地理编码：坐标转城市名（手动收藏时用，返回 city 或 province）。
-  static Future<String?> reverseGeocodeCity(double lat, double lng) async {
+  /// 逆地理编码：坐标转城市 + 国家（收藏保存时用，填充 Place.city / Place.country）。
+  static Future<({String? city, String? country})> reverseGeocode(
+      double lat, double lng) async {
     try {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 8);
@@ -112,10 +113,13 @@ class PoiSearchService {
           as Map<String, dynamic>?;
       final province = _readStr(component?['province']);
       final city = _readStr(component?['city']);
-      if (city.isNotEmpty) return city;
-      return province.isNotEmpty ? province : null;
+      final country = _readStr(component?['country']);
+      return (
+        city: city.isNotEmpty ? city : (province.isNotEmpty ? province : null),
+        country: country.isNotEmpty ? country : null,
+      );
     } catch (_) {
-      return null;
+      return (city: null, country: null);
     }
   }
 

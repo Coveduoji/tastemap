@@ -181,7 +181,7 @@ class _WebDavScreenState extends State<WebDavScreen> {
         padding: const EdgeInsets.symmetric(vertical: 13),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: secondary ? AppColors.bg : AppColors.ink,
+          color: secondary ? AppColors.bg : AppColors.accent,
           borderRadius: BorderRadius.circular(13),
         ),
         child: _busy

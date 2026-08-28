@@ -19,6 +19,8 @@ class PoiSheet extends StatefulWidget {
   final void Function(double lat, double lng)? onSelectLocation;
   final VoidCallback? onClose;
   final VoidCallback? onSaved;
+  /// 长按「+」打开时为 true：跳过附近地点列表，直接进入第 2 步表单内联填写名称（自定义地点，如秋千/拍照机位）。
+  final bool startManual;
 
   const PoiSheet({
     super.key,
@@ -27,6 +29,7 @@ class PoiSheet extends StatefulWidget {
     this.onSelectLocation,
     this.onClose,
     this.onSaved,
+    this.startManual = false,
   });
 
   @override
@@ -38,11 +41,14 @@ class PoiSheetState extends State<PoiSheet> {
   String _name = '';
   String _addr = '';
   String _city = '';
+  String _country = '';
   double _lat = 0;
   double _lng = 0;
+  bool _isCustom = false; // true = 自定义地点(长按/手动输入)，第 2 步名称可编辑
   late LatLng _currentCenter;
   final _formKey = GlobalKey<CollectionFormFieldsState>();
   final _searchController = TextEditingController();
+  final _nameController = TextEditingController();
   List<Poi> _pois = [];
   bool _loading = true;
 
@@ -51,11 +57,16 @@ class PoiSheetState extends State<PoiSheet> {
     super.initState();
     _currentCenter = widget.center;
     _loadPois();
+    if (widget.startManual) {
+      // 附近地点列表在背后加载，供用户改主意时点「← 重新选择」切回
+      WidgetsBinding.instance.addPostFrameCallback((_) => _manualInput());
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -106,72 +117,62 @@ class PoiSheetState extends State<PoiSheet> {
     }
   }
 
-  void _select(Poi poi) {
+  Future<void> _select(Poi poi) async {
     // 通知地图移动到选中地点
     widget.onSelectLocation?.call(poi.latitude, poi.longitude);
+    final geo = await PoiSearchService.reverseGeocode(poi.latitude, poi.longitude);
+    if (!mounted) return;
     setState(() {
       _name = poi.name;
       _addr = poi.addr;
-      _city = poi.city;
+      _city = poi.city.isNotEmpty ? poi.city : (geo.city ?? '');
+      _country = geo.country ?? '';
       _lat = poi.latitude;
       _lng = poi.longitude;
+      _isCustom = false;
       _step = 1;
     });
   }
 
+  /// 供长按「+」时从外部触发：跳过列表，直接对当前钉子位置命名(自定义地点)。
+  Future<void> startManualEntry() => _manualInput();
+
+  /// 自定义地点：地图上没有对应 POI 的位置(如秋千、拍照机位)。
+  /// 不用弹窗打字，直接进第 2 步表单内联编辑名称，跟其余表单字段一致的体验。
   Future<void> _manualInput() async {
-    final name = await _promptName();
-    if (name == null || name.isEmpty) return;
-    final city = await PoiSearchService.reverseGeocodeCity(
+    _nameController.clear();
+    final geo = await PoiSearchService.reverseGeocode(
         _currentCenter.latitude, _currentCenter.longitude);
     if (!mounted) return;
     setState(() {
-      _name = name;
-      _addr = '手动标记';
-      _city = city ?? '';
+      _addr = '自定义地点';
+      _city = geo.city ?? '';
+      _country = geo.country ?? '';
       _lat = _currentCenter.latitude;
       _lng = _currentCenter.longitude;
+      _isCustom = true;
       _step = 1;
     });
-  }
-
-  Future<String?> _promptName() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('手动输入地点名称'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: '输入地点名称...'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return result;
   }
 
   Future<void> _save() async {
     final form = _formKey.currentState;
     if (form == null) return;
+    final name = _isCustom ? _nameController.text.trim() : _name;
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先给这个地点起个名字')),
+      );
+      return;
+    }
     final now = nowIso8601();
     final place = Place(
       id: generateId(),
-      name: _name,
+      name: name,
       latitude: _lat,
       longitude: _lng,
       city: _city.isEmpty ? null : _city,
+      country: _country.isEmpty ? null : _country,
       type: 'custom',
       createdAt: now,
     );
@@ -302,14 +303,26 @@ class PoiSheetState extends State<PoiSheet> {
                     GestureDetector(
                       onTap: () => setState(() => _step = 0),
                       child: Text('← 重新选择',
-                          style: AppText.chip.copyWith(color: AppColors.hotel)),
+                          style: AppText.chip.copyWith(color: AppColors.accent)),
                     ),
                     const Spacer(),
                     Text('第 2 步 · 共 2 步', style: AppText.caption),
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(_name, style: AppText.placeName),
+                _isCustom
+                    ? TextField(
+                        controller: _nameController,
+                        autofocus: true,
+                        style: AppText.placeName,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                          hintText: '给这个地点起个名字…',
+                        ),
+                      )
+                    : Text(_name, style: AppText.placeName),
                 const SizedBox(height: 2),
                 Text(_addr, style: AppText.caption),
                 const SizedBox(height: 16),
@@ -352,7 +365,7 @@ class _PoiItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(11),
               ),
               alignment: Alignment.center,
-              child: Text(poi.tag.emoji, style: const TextStyle(fontSize: 20)),
+              child: Icon(poi.tag.icon, size: 20, color: AppColors.ink),
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -370,7 +383,7 @@ class _PoiItem extends StatelessWidget {
             ),
             Text(
               poi.distance.isNotEmpty ? poi.distance : poi.city,
-              style: AppText.chip.copyWith(color: AppColors.terracotta),
+              style: AppText.chip.copyWith(color: AppColors.accent),
             ),
           ],
         ),
@@ -403,14 +416,14 @@ class _ManualEntry extends StatelessWidget {
                 borderRadius: BorderRadius.circular(11),
               ),
               alignment: Alignment.center,
-              child: const Text('📍', style: TextStyle(fontSize: 19)),
+              child: const Icon(Icons.add_location_alt, size: 19, color: AppColors.stone),
             ),
             const SizedBox(width: 11),
             Text('找不到？',
                 style: AppText.body.copyWith(color: AppColors.stone)),
             const SizedBox(width: 4),
             Text('手动输入地点名称',
-                style: AppText.chip.copyWith(color: AppColors.hotel)),
+                style: AppText.chip.copyWith(color: AppColors.accent)),
           ],
         ),
       ),
@@ -433,7 +446,7 @@ class _SaveButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 13),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.ink,
+          color: AppColors.accent,
           borderRadius: BorderRadius.circular(13),
         ),
         child: Text(label,

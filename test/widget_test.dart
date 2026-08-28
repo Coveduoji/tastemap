@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tastemap/models/collection.dart';
@@ -10,9 +11,9 @@ void main() {
     expect(PrimaryTag.fromName('food'), PrimaryTag.food);
     expect(PrimaryTag.fromName('coffee'), PrimaryTag.coffee);
     expect(PrimaryTag.fromName('未知值'), PrimaryTag.food); // 兜底
-    expect(PrimaryTag.food.emoji, '🍜');
+    expect(PrimaryTag.food.icon, Icons.restaurant);
     expect(PrimaryTag.food.label, '美食');
-    expect(PrimaryTag.bar.emoji, '🍸');
+    expect(PrimaryTag.bar.icon, Icons.local_bar);
     expect(PrimaryTag.bar.label, '酒吧');
   });
 

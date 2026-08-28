@@ -97,7 +97,7 @@ class _EditCollectionSheetState extends State<EditCollectionSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.ink,
+                    color: AppColors.accent,
                     borderRadius: BorderRadius.circular(13),
                   ),
                   child: Text('保存修改',

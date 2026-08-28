@@ -22,7 +22,7 @@ class ProfileScreen extends StatelessWidget {
     final countries = all.map((v) => v.country).whereType<String>().toSet();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0EDE8),
+      backgroundColor: AppColors.warmWhite,
       body: SafeArea(
         child: Column(
           children: [
@@ -100,7 +100,7 @@ class ProfileScreen extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFE8F0F8), Color(0xFFD4E4F4)],
+          colors: [AppColors.warmWhite, AppColors.bg],
         ),
       ),
       child: Column(
@@ -115,12 +115,12 @@ class ProfileScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(13),
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFC4A882), Color(0xFF8B6A44)],
+                    colors: [AppColors.accent, AppColors.accentDeep],
                   ),
-                  border: Border.all(color: Colors.white70, width: 2),
+                  border: Border.all(color: AppColors.warmWhite, width: 2),
                 ),
                 alignment: Alignment.center,
-                child: const Text('🐕', style: TextStyle(fontSize: 28)),
+                child: const Icon(Icons.person, size: 28, color: AppColors.warmWhite),
               ),
               const SizedBox(width: 13),
               Expanded(
@@ -129,7 +129,7 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     Text('旅行者', style: AppText.profileNick),
                     const SizedBox(height: 3),
-                    Text('个人品味地图', style: AppText.caption.copyWith(color: const Color(0xFF6B7A8A))),
+                    Text('个人品味地图', style: AppText.caption.copyWith(color: AppColors.stone)),
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -149,7 +149,7 @@ class ProfileScreen extends StatelessWidget {
           Container(
             height: 88,
             decoration: BoxDecoration(
-              color: const Color(0xFFDDE8EE),
+              color: AppColors.bg,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Stack(
@@ -157,7 +157,7 @@ class ProfileScreen extends StatelessWidget {
                 Center(
                   child: Text(
                     '✓ $total 个收藏分布在地图上',
-                    style: AppText.caption.copyWith(color: const Color(0xFF6B7A8A)),
+                    style: AppText.caption.copyWith(color: AppColors.stone),
                   ),
                 ),
                 Positioned(
@@ -190,7 +190,7 @@ class ProfileScreen extends StatelessWidget {
       children: [
         Text(num, style: AppText.sectionTitle.copyWith(fontSize: 17)),
         const SizedBox(height: 1),
-        Text(label, style: AppText.caption.copyWith(color: const Color(0xFF6B7A8A), fontSize: 9)),
+        Text(label, style: AppText.caption.copyWith(color: AppColors.stone, fontSize: 9)),
       ],
     );
   }
@@ -240,7 +240,7 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(v.tag.emoji, style: const TextStyle(fontSize: 20)),
+                Icon(v.tag.icon, size: 20, color: AppColors.ink),
                 const SizedBox(height: 3),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -275,9 +275,9 @@ class ProfileScreen extends StatelessWidget {
   Widget _moreTile(int remaining) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF0EDE8),
+        color: AppColors.bg,
         borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: const Color(0xFFC5C0B8), width: 1.5),
+        border: Border.all(color: AppColors.cardBorder, width: 1.5),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -322,7 +322,7 @@ class ProfileScreen extends StatelessWidget {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: const Color(0xFFF5EFE6),
+              color: AppColors.bg,
               borderRadius: BorderRadius.circular(9),
             ),
             alignment: Alignment.center,
@@ -342,7 +342,7 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           Text('${views.length} 个',
-              style: AppText.chip.copyWith(color: AppColors.terracotta)),
+              style: AppText.chip.copyWith(color: AppColors.accent)),
         ],
       ),
     );
@@ -385,7 +385,7 @@ class ProfileScreen extends StatelessWidget {
                   onTap: onMore,
                   child: Text('查看全部 ›',
                       style: AppText.chip
-                          .copyWith(color: AppColors.terracotta, fontSize: 10)),
+                          .copyWith(color: AppColors.accent, fontSize: 10)),
                 ),
             ],
           ),

@@ -14,11 +14,11 @@ class TasteMapApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: AppColors.bg,
+        scaffoldBackgroundColor: AppColors.warmWhite,
         colorScheme: const ColorScheme.light(
           primary: AppColors.ink,
           onPrimary: AppColors.warmWhite,
-          secondary: AppColors.terracotta,
+          secondary: AppColors.accent,
           surface: AppColors.warmWhite,
           onSurface: AppColors.ink,
         ),

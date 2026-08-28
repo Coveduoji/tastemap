@@ -67,8 +67,8 @@ class NavPickerSheet extends StatelessWidget {
           ),
           const Divider(height: 1, color: AppColors.divider),
           _NavItem(
-            emoji: '🗺',
-            bg: AppColors.dangerBg,
+            icon: Icons.map,
+            bg: AppColors.bg,
             title: '高德地图',
             subtitle: '跳转到高德导航',
             onTap: () => _launch(
@@ -79,8 +79,8 @@ class NavPickerSheet extends StatelessWidget {
             ),
           ),
           _NavItem(
-            emoji: '🌐',
-            bg: AppColors.hotelBubble,
+            icon: Icons.public,
+            bg: AppColors.bg,
             title: 'Google Maps',
             subtitle: '跳转到 Google 导航',
             onTap: () => _launch(
@@ -91,8 +91,8 @@ class NavPickerSheet extends StatelessWidget {
             ),
           ),
           _NavItem(
-            emoji: '🍎',
-            bg: AppColors.sightBubble,
+            icon: Icons.explore,
+            bg: AppColors.bg,
             title: 'Apple 地图',
             subtitle: '跳转到 Apple 导航',
             isLast: true,
@@ -126,7 +126,7 @@ class NavPickerSheet extends StatelessWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  final String emoji;
+  final IconData icon;
   final Color bg;
   final String title;
   final String subtitle;
@@ -134,7 +134,7 @@ class _NavItem extends StatelessWidget {
   final bool isLast;
 
   const _NavItem({
-    required this.emoji,
+    required this.icon,
     required this.bg,
     required this.title,
     required this.subtitle,
@@ -163,7 +163,7 @@ class _NavItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: Text(emoji, style: const TextStyle(fontSize: 18)),
+              child: Icon(icon, size: 18, color: AppColors.ink),
             ),
             const SizedBox(width: 13),
             Expanded(
@@ -210,7 +210,7 @@ class _CopyItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: const Text('📋', style: TextStyle(fontSize: 18)),
+              child: const Icon(Icons.content_copy, size: 18, color: AppColors.ink),
             ),
             const SizedBox(width: 13),
             Text('拷贝地址',

@@ -114,13 +114,14 @@ class DetailSheet extends StatelessWidget {
                             spacing: 6,
                             runSpacing: 6,
                             children: [
-                              _dtag('${view.tag.emoji} ${view.tag.label}',
-                                  view.tag.bubbleColor, view.tag.accentColor),
+                              _dtag(view.tag.label, view.tag.bubbleColor,
+                                  view.tag.accentColor,
+                                  icon: view.tag.icon),
                               ...view.secondaryTags.map(
                                   (t) => _dtag(t, AppColors.bg, AppColors.stone)),
                               if (view.visited)
-                                _dtag('✓ 已打卡', AppColors.visited,
-                                    Colors.white),
+                                _dtag('已打卡', AppColors.visited, Colors.white,
+                                    icon: Icons.check),
                             ],
                           ),
                         ],
@@ -164,12 +165,12 @@ class DetailSheet extends StatelessWidget {
                   const Divider(height: 1, color: AppColors.divider),
                   const SizedBox(height: 8),
                   _InfoRow(
-                    icon: '📅',
+                    icon: Icons.event,
                     title: '收藏时间',
                     subtitle: formatChineseDate(view.createdAt),
                   ),
                   _InfoRow(
-                    icon: '📍',
+                    icon: Icons.location_on,
                     title: _addressText,
                     subtitle: '点击复制地址',
                     onTap: () => _copyAddress(context),
@@ -186,14 +187,14 @@ class DetailSheet extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _footBtn('✏️ 编辑', AppColors.bg, AppColors.ink, 0.8,
+                _footBtn(Icons.edit, '编辑', AppColors.bg, AppColors.ink, 0.8,
                     () => _edit(context)),
                 const SizedBox(width: 7),
-                _footBtn('🧭 导航前往', AppColors.ink, AppColors.warmWhite, 1.4,
-                    () => _nav(context)),
+                _footBtn(Icons.navigation, '导航前往', AppColors.accent,
+                    AppColors.warmWhite, 1.4, () => _nav(context)),
                 const SizedBox(width: 7),
-                _footBtn('🗑', AppColors.dangerBg, AppColors.danger, 0.7,
-                    () => _delete(context)),
+                _footBtn(Icons.delete_outline, '', AppColors.dangerBg,
+                    AppColors.danger, 0.7, () => _delete(context)),
               ],
             ),
           ),
@@ -228,18 +229,28 @@ class DetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _dtag(String label, Color bg, Color fg) {
+  Widget _dtag(String label, Color bg, Color fg, {IconData? icon}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(11),
       ),
-      child: Text(label, style: AppText.chip.copyWith(color: fg, fontSize: 11)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: fg),
+            const SizedBox(width: 4),
+          ],
+          Text(label,
+              style: AppText.chip.copyWith(color: fg, fontSize: 11)),
+        ],
+      ),
     );
   }
 
-  Widget _footBtn(String label, Color bg, Color fg, double flex,
+  Widget _footBtn(IconData icon, String label, Color bg, Color fg, double flex,
       VoidCallback onTap) {
     return Expanded(
       flex: (flex * 10).round(),
@@ -252,11 +263,20 @@ class DetailSheet extends StatelessWidget {
             color: bg,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Text(
-            label,
-            style: AppText.chip.copyWith(color: fg),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: fg),
+              if (label.isNotEmpty) ...[
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: AppText.chip.copyWith(color: fg),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -265,7 +285,7 @@ class DetailSheet extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  final String icon;
+  final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
@@ -285,7 +305,7 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 20,
-            child: Text(icon, style: const TextStyle(fontSize: 15)),
+            child: Icon(icon, size: 17, color: AppColors.stone),
           ),
           const SizedBox(width: 11),
           Expanded(

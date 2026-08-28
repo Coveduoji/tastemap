@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/primary_tag.dart';
+import '../theme/colors.dart';
 
-/// 地图 Pin：只显示 emoji（无圆泡、无尾巴）。
+/// 地图 Pin：只显示线性图标（无圆泡、无尾巴）。
 /// 已打卡 = 实色；待打卡 = 半透明。
 class PinMarker extends StatelessWidget {
   final PrimaryTag tag;
@@ -20,7 +21,7 @@ class PinMarker extends StatelessWidget {
   Widget build(BuildContext context) {
     return Opacity(
       opacity: visited ? 1 : 0.5,
-      child: Text(tag.emoji, style: TextStyle(fontSize: size)),
+      child: Icon(tag.icon, size: size, color: AppColors.ink),
     );
   }
 }

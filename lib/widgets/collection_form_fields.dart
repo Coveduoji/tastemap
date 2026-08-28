@@ -100,17 +100,13 @@ class CollectionFormFieldsState extends State<CollectionFormFields> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: AppColors.bg,
+                  color: selected ? AppColors.accent : AppColors.bg,
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(
-                    color: selected ? AppColors.ink : Colors.transparent,
-                    width: 2,
-                  ),
                 ),
                 child: Text(
                   label,
                   style: AppText.chip.copyWith(
-                    color: selected ? AppColors.ink : AppColors.stone,
+                    color: selected ? AppColors.warmWhite : AppColors.stone,
                   ),
                 ),
               ),
@@ -271,16 +267,25 @@ class _TagChip extends StatelessWidget {
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: tag.bubbleColor,
+          color: selected ? AppColors.accent : AppColors.bg,
           borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: selected ? AppColors.ink : Colors.transparent,
-            width: 2,
-          ),
         ),
-        child: Text(
-          '${tag.emoji} ${tag.label}',
-          style: AppText.chip.copyWith(color: tag.accentColor),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              tag.icon,
+              size: 16,
+              color: selected ? AppColors.warmWhite : AppColors.ink,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              tag.label,
+              style: AppText.chip.copyWith(
+                color: selected ? AppColors.warmWhite : AppColors.ink,
+              ),
+            ),
+          ],
         ),
       ),
     );
