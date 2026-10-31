@@ -31,7 +31,7 @@ class _ExportScreenState extends State<ExportScreen> {
               ),
             ],
             fileNameOverrides: [output.filename],
-            title: '品味地图',
+            title: '拾途',
           ),
         );
       } else {

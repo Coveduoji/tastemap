@@ -1,0 +1,9 @@
+# Generate with: dart run flutter_launcher_icons -f icon_preview_wander.yaml
+flutter_launcher_icons:
+  android: ic_wander_preview
+  ios: false
+  image_path: design/brand/explorations-v2/03-wandering-loop-white.png
+  adaptive_icon_background: '#FFFFFF'
+  adaptive_icon_foreground: design/brand/explorations-v2/03-wandering-loop-foreground.png
+  adaptive_icon_foreground_inset: 16
+  min_sdk_android: 21

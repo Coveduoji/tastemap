@@ -17,8 +17,25 @@ import 'sheet_chrome.dart';
 /// Pin 详情 Sheet：名称 / 标签 / 我的备注 / 收藏时间 / 地址 + 底部编辑·导航·删除。
 class DetailSheet extends StatelessWidget {
   final CollectionView view;
+  final ScrollController? scrollController;
+  final VoidCallback? onClose;
+  final VoidCallback? onDetails;
 
-  const DetailSheet({super.key, required this.view});
+  const DetailSheet({
+    super.key,
+    required this.view,
+    this.scrollController,
+    this.onClose,
+    this.onDetails,
+  });
+
+  void _close(BuildContext context) {
+    if (onClose != null) {
+      onClose!();
+    } else {
+      Navigator.pop(context, true);
+    }
+  }
 
   String get _addressText {
     if (view.place.address?.isNotEmpty == true) return view.place.address!;
@@ -54,7 +71,7 @@ class DetailSheet extends StatelessWidget {
     final ok = await provider.delete(view.id);
     if (!context.mounted) return;
     if (ok) {
-      Navigator.pop(context, true);
+      _close(context);
     } else {
       ScaffoldMessenger.of(
         context,
@@ -71,7 +88,7 @@ class DetailSheet extends StatelessWidget {
       builder: (_) => EditCollectionSheet(view: view),
     );
     if (changed == true && context.mounted) {
-      Navigator.pop(context, true);
+      _close(context);
     }
   }
 
@@ -96,146 +113,110 @@ class DetailSheet extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return SheetContainer(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SheetHandle(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          InkWell(
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              '/place',
-                              arguments: Poi.fromPlace(view.place),
-                            ),
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    view.name,
-                                    style: AppText.placeName,
-                                  ),
-                                ),
-                                const Icon(Icons.chevron_right),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 7),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              _dtag(
-                                view.tag.label,
-                                view.tag.bubbleColor,
-                                view.tag.accentColor,
-                                icon: view.tag.icon,
-                              ),
-                              ...view.secondaryTags.map(
-                                (t) => _dtag(t, AppColors.bg, AppColors.stone),
-                              ),
-                              if (view.visited)
-                                _dtag(
-                                  '已打卡',
-                                  AppColors.visited,
-                                  Colors.white,
-                                  icon: Icons.check,
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-              ],
+  Widget build(BuildContext context) => SheetContainer(
+    child: ListView(
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      children: [
+        Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 14),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.stone.withValues(alpha: .4),
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Divider(height: 1, color: AppColors.divider),
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (view.images.isNotEmpty) ...[
-                    _photoStrip(),
-                    const SizedBox(height: 14),
-                  ],
-                  if (view.note.isNotEmpty)
-                    Text(view.note, style: AppText.body),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1, color: AppColors.divider),
-                  const SizedBox(height: 8),
-                  _InfoRow(
-                    icon: Icons.event,
-                    title: '收藏时间',
-                    subtitle: formatChineseDate(view.createdAt),
-                  ),
-                  _InfoRow(
-                    icon: Icons.location_on,
-                    title: _addressText,
-                    subtitle: '',
-                    onTap: () => _copyAddress(context),
-                  ),
-                  const SizedBox(height: 8),
-                ],
+        ),
+        InkWell(
+          onTap:
+              onDetails ??
+              () => Navigator.pushNamed(
+                context,
+                '/place',
+                arguments: Poi.fromPlace(view.place),
               ),
-            ),
+          child: Row(
+            children: [
+              Expanded(child: Text(view.name, style: AppText.placeName)),
+              const Icon(Icons.chevron_right),
+            ],
           ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 9, 16, 16),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _dtag(
+              view.tag.label,
+              view.tag.bubbleColor,
+              view.tag.accentColor,
+              icon: view.tag.icon,
             ),
-            child: Row(
-              children: [
-                _footBtn(
-                  Icons.edit,
-                  '编辑',
-                  AppColors.bg,
-                  AppColors.ink,
-                  0.8,
-                  () => _edit(context),
-                ),
-                const SizedBox(width: 7),
-                _footBtn(
-                  Icons.navigation,
-                  '导航前往',
-                  AppColors.accent,
-                  AppColors.warmWhite,
-                  1.4,
-                  () => _nav(context),
-                ),
-                const SizedBox(width: 7),
-                _footBtn(
-                  Icons.delete_outline,
-                  '',
-                  AppColors.dangerBg,
-                  AppColors.danger,
-                  0.7,
-                  () => _delete(context),
-                ),
-              ],
+            ...view.secondaryTags.map(
+              (t) => _dtag(t, AppColors.bg, AppColors.stone),
             ),
-          ),
+            if (view.visited)
+              _dtag('已打卡', AppColors.visited, Colors.white, icon: Icons.check),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (view.images.isNotEmpty) ...[
+          _photoStrip(),
+          const SizedBox(height: 14),
         ],
-      ),
-    );
-  }
+        if (view.note.isNotEmpty) ...[
+          Text(view.note, style: AppText.body),
+          const SizedBox(height: 16),
+        ],
+        const Divider(height: 1, color: AppColors.divider),
+        _InfoRow(
+          icon: Icons.event,
+          title: '收藏时间',
+          subtitle: formatChineseDate(view.createdAt),
+        ),
+        _InfoRow(
+          icon: Icons.location_on,
+          title: _addressText,
+          subtitle: '',
+          onTap: () => _copyAddress(context),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            _footBtn(
+              Icons.edit,
+              '编辑',
+              AppColors.bg,
+              AppColors.ink,
+              .8,
+              () => _edit(context),
+            ),
+            const SizedBox(width: 7),
+            _footBtn(
+              Icons.navigation,
+              '导航前往',
+              AppColors.accent,
+              AppColors.warmWhite,
+              1.4,
+              () => _nav(context),
+            ),
+            const SizedBox(width: 7),
+            _footBtn(
+              Icons.delete_outline,
+              '',
+              AppColors.dangerBg,
+              AppColors.danger,
+              .7,
+              () => _delete(context),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 
   Widget _photoStrip() {
     return SizedBox(

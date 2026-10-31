@@ -16,6 +16,8 @@ class AppColors {
   static const Color accentSoft = Color(0xFFEAF1FF); // 强调色浅底（选中态背景/徽标底）
   static const Color stone = Color(0xFF7B8495); // 次要文字
 
+  static const Color mapFavorite = Color(0xFFFFC928); // 明黄色收藏及聚合标记
+
   // ── 语义色 ──
   static const Color danger = Color(0xFFC04040); // 删除（非纯红）
   static const Color dangerBg = Color(0xFFFDDCD8);

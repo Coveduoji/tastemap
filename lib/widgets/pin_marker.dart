@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/primary_tag.dart';
 import '../theme/colors.dart';
 
-/// 地图 Pin：白边圆形标记；实蓝表示已打卡，白底蓝图标表示待打卡。
+/// 收藏标记使用明黄色圆角五角星。
 class PinMarker extends StatelessWidget {
   final PrimaryTag tag;
   final bool visited;
@@ -13,32 +13,21 @@ class PinMarker extends StatelessWidget {
     super.key,
     required this.tag,
     required this.visited,
-    this.size = 28,
+    this.size = 40,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: visited ? AppColors.accent : AppColors.warmWhite,
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.warmWhite, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.ink.withValues(alpha: 0.10),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Icon(
-        tag.icon,
-        size: size * 0.6,
-        color: visited ? AppColors.warmWhite : AppColors.accent,
-      ),
+    return Icon(
+      Icons.star_rounded,
+      size: size,
+      color: AppColors.mapFavorite,
+      shadows: const [
+        Shadow(color: Colors.white, offset: Offset(-1, -1)),
+        Shadow(color: Colors.white, offset: Offset(1, -1)),
+        Shadow(color: Colors.white, offset: Offset(-1, 1)),
+        Shadow(color: Colors.white, offset: Offset(1, 1)),
+      ],
     );
   }
 }
@@ -64,7 +53,7 @@ class FavoriteMarker extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.cardBorder),
+            border: Border.all(color: AppColors.mapFavorite, width: 1.5),
           ),
           child: Text(
             name,
@@ -80,14 +69,36 @@ class FavoriteMarker extends StatelessWidget {
       ),
       SizedBox(
         height: 28,
-        child: Center(
-          child: Container(
-            width: 1,
-            color: AppColors.stone.withValues(alpha: .45),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Transform.translate(
+            offset: const Offset(0, -1),
+            child: CustomPaint(size: const Size(12, 9), painter: _BubbleTip()),
           ),
         ),
       ),
-      PinMarker(tag: tag, visited: visited, size: 30),
+      PinMarker(tag: tag, visited: visited, size: 40),
     ],
   );
+}
+
+class _BubbleTip extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0);
+    canvas.drawPath(path, Paint()..color = Colors.white);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.mapFavorite
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BubbleTip oldDelegate) => false;
 }

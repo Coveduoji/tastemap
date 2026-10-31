@@ -105,7 +105,7 @@ class _NativeAMapState extends State<NativeAMap> {
             (value['lng'] as num).toDouble(),
           ),
           anchor: value['label'] == true && value['cluster'] != true
-              ? const Offset(.5, 71 / 86)
+              ? const Offset(.5, 76 / 96)
               : const Offset(.5, .5),
           icon: icon,
           infoWindowEnable: false,
@@ -121,7 +121,7 @@ class _NativeAMapState extends State<NativeAMap> {
   // Drawing the app's tag artwork is business styling; marker management is the plugin's.
   Future<amap.BitmapDescriptor> _icon(Map<String, dynamic> value) async {
     final cluster = value['cluster'] == true;
-    final visited = value['visited'] == true;
+    final favorite = cluster || value['label'] == true;
     final labelled = !cluster && value['label'] == true;
     final label = labelled
         ? (TextPainter(
@@ -140,15 +140,25 @@ class _NativeAMapState extends State<NativeAMap> {
         : null;
     final text = cluster
         ? '${value['title']} · ${value['count']}'
-        : String.fromCharCode(value['icon'] as int);
+        : String.fromCharCode(
+            labelled ? Icons.star_rounded.codePoint : value['icon'] as int,
+          );
     final painter = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
           fontFamily: cluster ? null : 'MaterialIcons',
-          fontSize: cluster ? 12 : 16,
+          fontSize: cluster
+              ? 12
+              : labelled
+              ? 40
+              : 16,
           fontWeight: cluster ? FontWeight.w600 : null,
-          color: cluster || visited ? Colors.white : AppColors.accent,
+          color: labelled
+              ? AppColors.mapFavorite
+              : cluster
+              ? AppColors.ink
+              : Colors.white,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -157,9 +167,9 @@ class _NativeAMapState extends State<NativeAMap> {
       cluster
           ? painter.width + 22
           : labelled
-          ? label!.width + 24
+          ? (label!.width + 24).clamp(44.0, double.infinity)
           : 30,
-      labelled ? 86 : 30,
+      labelled ? 96 : 30,
     );
     final ratio = MediaQuery.devicePixelRatioOf(context);
     final recorder = ui.PictureRecorder();
@@ -173,16 +183,24 @@ class _NativeAMapState extends State<NativeAMap> {
       canvas.drawRRect(
         bubble,
         Paint()
-          ..color = AppColors.cardBorder
+          ..color = AppColors.mapFavorite
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
+          ..strokeWidth = 1.5,
       );
-      canvas.drawLine(
-        Offset(size.width / 2, 28),
-        Offset(size.width / 2, 56),
+      final tip = ui.Path()
+        ..moveTo(size.width / 2 - 6, 27)
+        ..lineTo(size.width / 2, 35)
+        ..lineTo(size.width / 2 + 6, 27);
+      canvas.drawPath(tip, Paint()..color = Colors.white);
+      canvas.drawPath(
+        ui.Path()
+          ..moveTo(size.width / 2 - 6, 28)
+          ..lineTo(size.width / 2, 35)
+          ..lineTo(size.width / 2 + 6, 28),
         Paint()
-          ..color = AppColors.stone.withValues(alpha: .45)
-          ..strokeWidth = 1,
+          ..color = AppColors.mapFavorite
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
       );
       label!.paint(
         canvas,
@@ -190,23 +208,48 @@ class _NativeAMapState extends State<NativeAMap> {
       );
     }
     final markerRect = labelled
-        ? Rect.fromLTWH((size.width - 30) / 2, 56, 30, 30)
+        ? Rect.fromLTWH((size.width - 40) / 2, 56, 40, 40)
         : Offset.zero & size;
-    final shape = RRect.fromRectAndRadius(
-      markerRect,
-      const Radius.circular(15),
-    );
-    canvas.drawRRect(
-      shape,
-      Paint()..color = cluster || visited ? AppColors.accent : Colors.white,
-    );
-    canvas.drawRRect(
-      shape.deflate(.75),
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
+    if (labelled) {
+      final outline = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            fontFamily: 'MaterialIcons',
+            fontSize: 40,
+            foreground: Paint()
+              ..color = Colors.white
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.5,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      outline.paint(
+        canvas,
+        Offset(
+          markerRect.left + (markerRect.width - outline.width) / 2,
+          markerRect.top + (markerRect.height - outline.height) / 2,
+        ),
+      );
+      outline.dispose();
+    } else {
+      final shape = RRect.fromRectAndRadius(
+        markerRect,
+        const Radius.circular(15),
+      );
+      canvas.drawRRect(
+        shape,
+        Paint()..color = favorite ? AppColors.mapFavorite : AppColors.accent,
+      );
+      canvas.drawRRect(
+        shape.deflate(.75),
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
     painter.paint(
       canvas,
       Offset(

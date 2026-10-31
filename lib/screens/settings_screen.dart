@@ -6,6 +6,8 @@ import '../data/nearby_notifications.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import 'export_screen.dart';
+import 'app_icon_screen.dart';
+import 'developer_contact_screen.dart';
 import 'webdav_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -67,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       showAboutDialog(
         context: context,
-        applicationName: '品味地图',
+        applicationName: '拾途',
         applicationVersion: '${info.version} (${info.buildNumber})',
       );
     }
@@ -121,6 +123,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
           _group([
+            _item(
+              Icons.apps_rounded,
+              '应用图标',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AppIconScreen()),
+              ),
+            ),
+          ]),
+          _group([
             _item(Icons.cleaning_services_outlined, '清理地图缓存', _clearMapCache),
             SwitchListTile(
               title: const Text('附近收藏提醒'),
@@ -138,6 +150,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           _group([
             _item(Icons.info_outline, '版本信息', _version),
+            _item(
+              Icons.mail_outline,
+              '联系开发者',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DeveloperContactScreen(),
+                ),
+              ),
+            ),
             _item(Icons.feedback_outlined, '反馈问题', _feedback),
             _item(
               Icons.help_outline,

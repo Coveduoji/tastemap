@@ -8,9 +8,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="品味地图"
+        android:label="拾途"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_wander_preview">
         <meta-data android:name="com.amap.api.v2.apikey" android:value="${AMAP_API_KEY}"/>
         <service android:name="com.amap.api.location.APSService" android:exported="false"/>
         <activity
@@ -30,11 +30,36 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+        </activity>
+        <!-- Both launcher icons target the same enabled activity and share all app data. -->
+        <activity-alias
+            android:name="com.tastemap.tastemap.IconWander"
+            android:targetActivity="com.tastemap.tastemap.MainActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:label="拾途"
+            android:icon="@mipmap/ic_wander_preview">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name="com.tastemap.tastemap.IconJournal"
+            android:targetActivity="com.tastemap.tastemap.MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="拾途"
+            android:icon="@mipmap/ic_journal_preview">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <service
+            android:name="com.solusibejo.flutter_dynamic_icon_plus.FlutterDynamicIconPlusService"
+            android:exported="false"
+            android:stopWithTask="false"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

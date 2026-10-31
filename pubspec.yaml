@@ -1,5 +1,5 @@
 name: tastemap
-description: "TasteMap 品味地图 —— 极简个人地点收藏工具。把你喜欢的地方，钉在地图上。"
+description: "拾途 —— 极简个人地点收藏工具。把你喜欢的地方，钉在地图上。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -59,6 +59,7 @@ dependencies:
   path_provider: ^2.1.6
   webdav_client: ^1.2.2
   connectivity_plus: ^7.3.1
+  flutter_dynamic_icon_plus: ^1.6.0
 
 dependency_overrides:
   amap_map:
@@ -74,6 +75,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -85,6 +87,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/app_icons/wander.png
+    - assets/app_icons/journal.png
+    - assets/contact/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

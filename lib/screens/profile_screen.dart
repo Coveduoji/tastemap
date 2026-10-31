@@ -186,7 +186,7 @@ class ProfileScreen extends StatelessWidget {
           ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Text(
-                '收藏一处喜欢，开启你的品味地图。',
+                '收藏一处喜欢的地方。',
                 style: AppText.body.copyWith(color: AppColors.stone),
               ),
             )

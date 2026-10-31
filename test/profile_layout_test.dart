@@ -26,7 +26,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('我的足迹'), findsOneWidget);
-    expect(find.text('收藏一处喜欢，开启你的品味地图。'), findsOneWidget);
+    expect(find.text('收藏一处喜欢的地方。'), findsOneWidget);
     await tester.drag(
       find.byType(SingleChildScrollView),
       const Offset(0, -450),

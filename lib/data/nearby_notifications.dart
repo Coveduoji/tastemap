@@ -149,7 +149,7 @@ class NearbyNotifications with WidgetsBindingObserver {
     await _initialize();
     await _plugin.show(
       0,
-      '品味地图',
+      '拾途',
       '提醒已开启',
       const NotificationDetails(
         android: AndroidNotificationDetails('nearby_places', '附近收藏'),
