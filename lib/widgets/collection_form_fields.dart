@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../state/collection_provider.dart';
 
 import '../models/primary_tag.dart';
 import '../models/secondary_tag.dart';
@@ -61,67 +63,77 @@ class CollectionFormFieldsState extends State<CollectionFormFields> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<CollectionProvider>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _FieldLabel('类型 *'),
         Wrap(
           spacing: 6,
           runSpacing: 8,
-          children: PrimaryTag.values
-              .map((t) => _TagChip(
-                    tag: t,
-                    selected: _tag == t,
-                    onTap: () => setState(() => _tag = t),
-                  ))
-              .toList(),
+          children: [
+            ...{...provider.tagOptions, _tag}.map(
+              (t) => _TagChip(
+                tag: t,
+                selected: _tag == t,
+                onTap: () => setState(() => _tag = t),
+                onDelete: t.isCustom ? () => _deleteOption(type: t) : null,
+              ),
+            ),
+            _addButton('自定义类型', () => _addOption(true)),
+          ],
         ),
         const SizedBox(height: 16),
-        const _FieldLabel('打卡状态'),
         _StatusToggle(
           visited: _visited,
           onChanged: (v) => setState(() => _visited = v),
         ),
         const SizedBox(height: 16),
-        const _FieldLabel('二级标签（选填）'),
         Wrap(
           spacing: 6,
           runSpacing: 8,
-          children: secondaryTagOptions.map((label) {
-            final selected = _secondaryTags.contains(label);
-            return GestureDetector(
-              onTap: () => setState(() {
-                selected
-                    ? _secondaryTags.remove(label)
-                    : _secondaryTags.add(label);
-              }),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.accent : AppColors.bg,
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Text(
+          children: [
+            ...{...provider.labelOptions, ..._secondaryTags}.map((label) {
+              final selected = _secondaryTags.contains(label);
+              return InputChip(
+                label: Text(
                   label,
                   style: AppText.chip.copyWith(
-                    color: selected ? AppColors.warmWhite : AppColors.stone,
+                    color: selected ? Colors.white : AppColors.stone,
                   ),
                 ),
-              ),
-            );
-          }).toList(),
+                selected: selected,
+                showCheckmark: false,
+                onPressed: () => setState(() {
+                  selected
+                      ? _secondaryTags.remove(label)
+                      : _secondaryTags.add(label);
+                }),
+                onDeleted: secondaryTagOptions.contains(label)
+                    ? null
+                    : () => _deleteOption(label: label),
+                deleteIcon: Icon(
+                  Icons.close,
+                  size: 14,
+                  color: selected ? Colors.white : AppColors.stone,
+                ),
+                deleteButtonTooltipMessage: '删除自定义标签',
+                backgroundColor: AppColors.bg,
+                selectedColor: AppColors.accent,
+                side: BorderSide.none,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              );
+            }),
+            _addButton('自定义标签', () => _addOption(false)),
+          ],
         ),
         const SizedBox(height: 16),
-        const _FieldLabel('备注（选填）'),
         TextField(
           controller: _noteController,
           maxLength: 200,
           minLines: 2,
           maxLines: 4,
           decoration: InputDecoration(
-            hintText: '加了个人记忆的锚点...',
+            hintText: '写点备注…',
             counterText: '',
             filled: true,
             fillColor: AppColors.warmWhite,
@@ -134,10 +146,120 @@ class CollectionFormFieldsState extends State<CollectionFormFields> {
           style: AppText.body,
         ),
         const SizedBox(height: 16),
-        const _FieldLabel('图片（选填，最多 3 张）'),
         _imageSection(),
       ],
     );
+  }
+
+  Widget _addButton(String label, VoidCallback onTap) => ActionChip(
+    avatar: const Icon(Icons.add, size: 16, color: AppColors.accent),
+    label: Text(label, style: AppText.chip.copyWith(color: AppColors.accent)),
+    onPressed: onTap,
+    backgroundColor: AppColors.accentSoft,
+    side: BorderSide.none,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
+  Future<void> _deleteOption({PrimaryTag? type, String? label}) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final name = type?.label ?? label!;
+    final provider = context.read<CollectionProvider>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('删除“$name”？'),
+        content: Text(
+          type != null
+              ? '将删除这个自定义类型，使用它的收藏改为“未分类”。收藏地点、备注和图片保留。'
+              : '将从所有收藏中移除这个自定义标签，收藏地点保留。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = type != null
+        ? await provider.removeType(type)
+        : await provider.removeLabel(label!);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('删除失败，请重试')));
+      return;
+    }
+    setState(() {
+      if (type != null && _tag == type) _tag = PrimaryTag.other;
+      if (label != null) _secondaryTags.remove(label);
+    });
+  }
+
+  Future<void> _addOption(bool primary) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final provider = context.read<CollectionProvider>();
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(primary ? '自定义类型' : '自定义标签'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 24,
+          decoration: InputDecoration(
+            hintText: primary ? '例如：书店、公园' : '例如：适合独处、周末去',
+          ),
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) Navigator.pop(ctx, value.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(ctx, controller.text.trim());
+              }
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+    // Wait until the dialog has finished its exit animation before disposing its controller.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    controller.dispose();
+    if (!mounted || value == null) return;
+    final normalized = value.replaceAll(RegExp(r'\s+'), ' ');
+    final tag = primary ? PrimaryTag.custom(normalized) : null;
+    final ok = primary
+        ? await provider.addType(tag!)
+        : await provider.addLabel(normalized);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('未能保存，请重试')));
+      return;
+    }
+    setState(() {
+      if (primary) {
+        _tag = tag!;
+      } else {
+        _secondaryTags.add(normalized);
+      }
+    });
   }
 
   Future<void> _addImages() async {
@@ -177,42 +299,49 @@ class CollectionFormFieldsState extends State<CollectionFormFields> {
       spacing: 8,
       runSpacing: 8,
       children: [
-        ..._images.asMap().entries.map((e) => Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.file(
-                    File(e.value),
+        ..._images.asMap().entries.map(
+          (e) => Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.file(
+                  File(e.value),
+                  width: 72,
+                  height: 72,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
                     width: 72,
                     height: 72,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
-                      width: 72,
-                      height: 72,
-                      color: AppColors.bg,
-                      child: const Icon(Icons.broken_image,
-                          color: AppColors.stone),
+                    color: AppColors.bg,
+                    child: const Icon(
+                      Icons.broken_image,
+                      color: AppColors.stone,
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 3,
-                  right: 3,
-                  child: GestureDetector(
-                    onTap: () => setState(() => _images.removeAt(e.key)),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.close,
-                          size: 12, color: Colors.white),
+              ),
+              Positioned(
+                top: 3,
+                right: 3,
+                child: GestureDetector(
+                  onTap: () => setState(() => _images.removeAt(e.key)),
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      size: 12,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-              ],
-            )),
+              ),
+            ],
+          ),
+        ),
         if (_images.length < 3)
           GestureDetector(
             onTap: _addImages,
@@ -223,27 +352,16 @@ class CollectionFormFieldsState extends State<CollectionFormFields> {
                 color: AppColors.bg,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: AppColors.stone.withValues(alpha: 0.5)),
+                  color: AppColors.stone.withValues(alpha: 0.5),
+                ),
               ),
-              child: const Icon(Icons.add_a_photo_outlined,
-                  color: AppColors.stone),
+              child: const Icon(
+                Icons.add_a_photo_outlined,
+                color: AppColors.stone,
+              ),
             ),
           ),
       ],
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  final String text;
-
-  const _FieldLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Text(text, style: AppText.label.copyWith(letterSpacing: 0.1)),
     );
   }
 }
@@ -252,11 +370,13 @@ class _TagChip extends StatelessWidget {
   final PrimaryTag tag;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   const _TagChip({
     required this.tag,
     required this.selected,
     required this.onTap,
+    this.onDelete,
   });
 
   @override
@@ -285,6 +405,23 @@ class _TagChip extends StatelessWidget {
                 color: selected ? AppColors.warmWhite : AppColors.ink,
               ),
             ),
+            if (onDelete != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Semantics(
+                  button: true,
+                  label: '删除自定义类型${tag.label}',
+                  child: GestureDetector(
+                    onTap: onDelete,
+                    behavior: HitTestBehavior.opaque,
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: selected ? Colors.white : AppColors.stone,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

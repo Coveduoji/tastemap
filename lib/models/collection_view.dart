@@ -45,6 +45,12 @@ class CollectionView {
       'longitude': row['longitude'],
       'city': row['city'],
       'country': row['country'],
+      'province': row['province'],
+      'district': row['district'],
+      'adcode': row['adcode'],
+      'amap_id': row['amap_id'],
+      'address': row['address'],
+
       'type': row['type'],
       'source': row['source'],
       'foursquare_id': row['foursquare_id'],

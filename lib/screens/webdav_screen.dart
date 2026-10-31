@@ -37,10 +37,18 @@ class _WebDavScreenState extends State<WebDavScreen> {
   }
 
   Future<void> _loadConfig() async {
-    _urlController.text = await _repo.getSetting('webdav_url') ?? '';
-    _userController.text = await _repo.getSetting('webdav_username') ?? '';
-    _passController.text = await _repo.getSetting('webdav_password') ?? '';
-    if (mounted) setState(() {});
+    final values = await Future.wait(
+      [
+        'webdav_url',
+        'webdav_username',
+        'webdav_password',
+      ].map(_repo.getSetting),
+    );
+    if (!mounted) return;
+    _urlController.text = values[0] ?? '';
+    _userController.text = values[1] ?? '';
+    _passController.text = values[2] ?? '';
+    setState(() {});
   }
 
   Future<void> _saveConfig() async {
@@ -50,10 +58,10 @@ class _WebDavScreenState extends State<WebDavScreen> {
   }
 
   SyncService _service() => SyncService(
-        url: _urlController.text.trim(),
-        username: _userController.text.trim(),
-        password: _passController.text,
-      );
+    url: _urlController.text.trim(),
+    username: _userController.text.trim(),
+    password: _passController.text,
+  );
 
   void _toast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -62,15 +70,26 @@ class _WebDavScreenState extends State<WebDavScreen> {
   }
 
   Future<void> _backup() async {
-    await _saveConfig();
+    final uri = Uri.tryParse(_urlController.text.trim());
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        _userController.text.trim().isEmpty ||
+        _passController.text.isEmpty) {
+      _toast('请填写 HTTPS 地址、账号和应用密码');
+      return;
+    }
     setState(() => _busy = true);
     try {
+      await _saveConfig();
       final places = await _repo.getAllPlaces();
       final views = await _repo.getCollectionViews();
       final collections = views.map((v) => v.collection).toList();
       final json = _service().buildBackupJson(places, collections);
       final ok = await _service().upload(json);
       if (mounted) _toast(ok ? '✓ 备份成功' : '备份失败，请检查配置');
+    } catch (_) {
+      if (mounted) _toast('操作失败，请检查配置或备份文件');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -78,17 +97,47 @@ class _WebDavScreenState extends State<WebDavScreen> {
 
   Future<void> _restore() async {
     final provider = context.read<CollectionProvider>();
-    await _saveConfig();
+    final uri = Uri.tryParse(_urlController.text.trim());
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        _userController.text.trim().isEmpty ||
+        _passController.text.isEmpty) {
+      _toast('请填写 HTTPS 地址、账号和应用密码');
+      return;
+    }
     setState(() => _busy = true);
     try {
+      await _saveConfig();
       final json = await _service().download();
       if (json == null) {
         if (mounted) _toast('下载失败，请检查配置');
         return;
       }
       final parsed = _service().parseBackupJson(json);
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('替换本地收藏？'),
+          content: Text('云端有 ${parsed.collections.length} 条收藏，将覆盖当前本地数据。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('恢复'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
       final ok = await provider.importAll(parsed.places, parsed.collections);
       if (mounted) _toast(ok ? '✓ 恢复成功' : '恢复失败');
+    } catch (_) {
+      if (mounted) _toast('操作失败，请检查配置或备份文件');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -110,8 +159,10 @@ class _WebDavScreenState extends State<WebDavScreen> {
                     icon: const Icon(Icons.arrow_back, color: AppColors.ink),
                   ),
                   const SizedBox(width: 6),
-                  Text('坚果云同步',
-                      style: AppText.sectionTitle.copyWith(fontSize: 16)),
+                  Text(
+                    '坚果云同步',
+                    style: AppText.sectionTitle.copyWith(fontSize: 16),
+                  ),
                 ],
               ),
             ),
@@ -141,11 +192,6 @@ class _WebDavScreenState extends State<WebDavScreen> {
                     obscureText: true,
                     decoration: _dec('坚果云生成的第三方应用密码'),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '提示：登录坚果云 → 账户信息 → 安全选项 → 第三方应用管理 → 生成应用密码',
-                    style: AppText.caption,
-                  ),
                   const SizedBox(height: 24),
                   _actionButton('立即备份到云端', _backup),
                   const SizedBox(height: 10),
@@ -161,19 +207,21 @@ class _WebDavScreenState extends State<WebDavScreen> {
   }
 
   InputDecoration _dec(String hint) => InputDecoration(
-        hintText: hint,
-        filled: true,
-        fillColor: AppColors.bg,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(11),
-          borderSide: BorderSide.none,
-        ),
-      );
+    hintText: hint,
+    filled: true,
+    fillColor: AppColors.bg,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(11),
+      borderSide: BorderSide.none,
+    ),
+  );
 
-  Widget _actionButton(String label, VoidCallback onTap,
-      {bool secondary = false}) {
+  Widget _actionButton(
+    String label,
+    VoidCallback onTap, {
+    bool secondary = false,
+  }) {
     return GestureDetector(
       onTap: _busy ? null : onTap,
       child: Container(
@@ -189,7 +237,9 @@ class _WebDavScreenState extends State<WebDavScreen> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppColors.warmWhite),
+                  strokeWidth: 2,
+                  color: AppColors.warmWhite,
+                ),
               )
             : Text(
                 label,

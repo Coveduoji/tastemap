@@ -34,6 +34,19 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  amap_map: 1.0.15
+  amap_location_flutter: 1.0.0
+  x_amap_base: ^1.0.3
+  collection: ^1.19.1
+  uuid: ^4.5.1
+  dio: ^5.9.0
+  cached_network_image: ^3.4.1
+  share_plus: ^13.3.1
+  file_picker: ^13.3.0
+  csv: ^6.0.0
+  package_info_plus: ^10.2.1
+  flutter_local_notifications: ^19.5.0
+  flutter_secure_storage: ^11.2.0
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   sqflite: ^2.4.2+1
@@ -46,6 +59,10 @@ dependencies:
   path_provider: ^2.1.6
   webdav_client: ^1.2.2
   connectivity_plus: ^7.3.1
+
+dependency_overrides:
+  amap_map:
+    path: third_party/amap_map
 
 dev_dependencies:
   flutter_test:

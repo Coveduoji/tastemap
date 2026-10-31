@@ -1,153 +1,291 @@
-import 'dart:convert';
-import 'dart:io';
-
+import 'package:dio/dio.dart';
+import 'package:latlong2/latlong.dart';
 import '../config.dart';
-import '../models/primary_tag.dart';
+import '../models/place.dart';
+import '../models/poi_category.dart';
 
-/// 附近地点（来自高德周边搜索）。
 class Poi {
-  final String name;
-  final PrimaryTag tag;
-  final String addr;
-  final String city;
-  final String distance;
-  final double latitude;
-  final double longitude;
-
+  final String name, id, typeCode, typeDescription, addr, city, distance;
+  final String province, district, adcode, phone, hours, rating, cost;
+  final String weeklyHours, businessArea, feature, parkingType, floor, alias;
+  final List<Poi> children;
+  final List<String> photos;
+  final double latitude, longitude;
+  PoiCategory get category => PoiCategory.fromAmap(typeCode, typeDescription);
   const Poi({
     required this.name,
-    required this.tag,
+    this.id = '',
+    this.typeCode = '',
+    this.typeDescription = '',
     required this.addr,
     this.city = '',
+    this.province = '',
+    this.district = '',
+    this.adcode = '',
+    this.phone = '',
+    this.hours = '',
+    this.rating = '',
+    this.cost = '',
+    this.photos = const [],
+    this.weeklyHours = '',
+    this.businessArea = '',
+    this.feature = '',
+    this.parkingType = '',
+    this.floor = '',
+    this.alias = '',
+    this.children = const [],
     required this.distance,
     required this.latitude,
     required this.longitude,
   });
+  factory Poi.fromPlace(Place p) => Poi(
+    name: p.name,
+    id: p.amapId ?? '',
+    addr: p.address ?? '',
+    city: p.city ?? '',
+    province: p.province ?? '',
+    district: p.district ?? '',
+    adcode: p.adcode ?? '',
+    distance: '',
+    latitude: p.latitude,
+    longitude: p.longitude,
+  );
+  factory Poi.fromMap(Map<String, dynamic> m) {
+    final location = read(m['location']).split(',');
+    final business = m['business'] is Map
+        ? m['business'] as Map
+        : m['biz_ext'] is Map
+        ? m['biz_ext'] as Map
+        : const {};
+    final photos = m['photos'] is List
+        ? (m['photos'] as List)
+              .whereType<Map>()
+              .map((v) => read(v['url']))
+              .where(
+                (s) =>
+                    Uri.tryParse(s)?.scheme == 'https' ||
+                    Uri.tryParse(s)?.scheme == 'http',
+              )
+              .toList()
+        : <String>[];
+    final indoor = m['indoor'] is Map
+        ? m['indoor'] as Map
+        : m['indoor_data'] is Map
+        ? m['indoor_data'] as Map
+        : const {};
+    final childRows = m['children'] is List ? m['children'] as List : const [];
+    final meters = int.tryParse(read(m['distance']));
+    return Poi(
+      name: read(m['name']),
+      id: read(m['id']),
+      typeCode: read(m['typecode']),
+      typeDescription: read(m['type']),
+      addr: read(m['address']),
+      city: read(m['cityname']),
+      province: read(m['pname']),
+      district: read(m['adname']),
+      adcode: read(m['adcode']),
+      phone: read(business['tel']).isNotEmpty
+          ? read(business['tel'])
+          : read(m['tel']),
+      hours: read(business['opentime_today']).isNotEmpty
+          ? read(business['opentime_today'])
+          : read(business['opentime']).isNotEmpty
+          ? read(business['opentime'])
+          : read(m['opentime']),
+      rating: read(business['rating']),
+      cost: read(business['cost']),
+      photos: photos.toSet().toList(),
+      weeklyHours: read(business['opentime_week']),
+      businessArea: read(business['business_area']).isNotEmpty
+          ? read(business['business_area'])
+          : read(m['business_area']),
+      feature: read(business['tag']).isNotEmpty
+          ? read(business['tag'])
+          : read(m['tag']),
+      parkingType: read(business['parking_type']).isNotEmpty
+          ? read(business['parking_type'])
+          : read(m['parking_type']),
+      floor: read(indoor['floor']),
+      alias: read(m['alias']),
+      children: childRows
+          .whereType<Map>()
+          .map(
+            (row) => Poi.fromMap({
+              ...row.cast<String, dynamic>(),
+              'children': const [],
+              'cityname': read(m['cityname']),
+            }),
+          )
+          .where(
+            (p) => p.name.isNotEmpty && (p.latitude != 0 || p.longitude != 0),
+          )
+          .toList(),
+      distance: meters == null
+          ? ''
+          : meters >= 1000
+          ? '${(meters / 1000).toStringAsFixed(1)}km'
+          : '${meters}m',
+      latitude: location.length == 2 ? double.tryParse(location[1]) ?? 0 : 0,
+      longitude: location.isNotEmpty ? double.tryParse(location[0]) ?? 0 : 0,
+    );
+  }
+  static String read(dynamic value) => value is String
+      ? value
+      : value is num
+      ? '$value'
+      : value is List && value.isNotEmpty
+      ? read(value.first)
+      : '';
 }
 
-/// 高德周边搜索（真实附近地点，按距离排序）。
+typedef PlaceGeography = ({
+  String? city,
+  String? country,
+  String? address,
+  String? province,
+  String? district,
+  String? adcode,
+});
+
 class PoiSearchService {
-  /// 周边搜索：当前位置附近的真实地点，按距离排序。
-  static Future<List<Poi>> searchNearby(double lat, double lng) {
-    return _search(
-      'https://restapi.amap.com/v3/place/around'
-      '?key=${AppConfig.amapWebApiKey}'
-      '&location=$lng,$lat'
-      '&radius=1000'
-      '&sortrule=distance'
-      '&offset=10'
-      '&page=1',
-      lat,
-      lng,
+  static final Dio _http = Dio(
+    BaseOptions(
+      baseUrl: 'https://restapi.amap.com',
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 10),
+    ),
+  );
+  static Future<Map<String, dynamic>> _get(
+    String path,
+    Map<String, dynamic> params,
+  ) async {
+    final result = await _http.get<Map<String, dynamic>>(
+      path,
+      queryParameters: {'key': AppConfig.amapWebApiKey, ...params},
     );
+    final data = result.data ?? {};
+    if (data['status'] != '1') throw StateError('地点服务暂不可用');
+    return data;
   }
 
-  /// 关键词搜索：全国范围按名称搜索（不限制当前位置，便于异地收藏、以后去）。
-  static Future<List<Poi>> searchByName(String keyword, double lat, double lng) {
-    final kw = Uri.encodeComponent(keyword);
-    return _search(
-      'https://restapi.amap.com/v3/place/text'
-      '?key=${AppConfig.amapWebApiKey}'
-      '&keywords=$kw'
-      '&offset=20'
-      '&page=1',
-      lat,
-      lng,
-    );
-  }
-
-  static Future<List<Poi>> _search(String url, double lat, double lng) async {
-    try {
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 8);
-      final req = await client.getUrl(Uri.parse(url));
-      final res = await req.close();
-      final body = await res.transform(utf8.decoder).join();
-      final decoded = jsonDecode(body) as Map<String, dynamic>;
-      if (decoded['status'] != '1') return const [];
-      final pois = decoded['pois'] as List? ?? const [];
-      return pois
-          .map((p) {
-            final m = p as Map<String, dynamic>;
-            final loc = (m['location'] as String? ?? '').split(',');
-            final name = m['name'] as String? ?? '';
-            if (name.isEmpty) return null;
-            return Poi(
-              name: name,
-              tag: _tagFromAmapType(m['type'] as String? ?? ''),
-              addr: _readStr(m['address']),
-              city: _readStr(m['cityname']),
-              distance: _formatDistance(_readStr(m['distance'])),
-              latitude: double.tryParse(loc.length > 1 ? loc[1] : '') ?? lat,
-              longitude: double.tryParse(loc.isNotEmpty ? loc[0] : '') ?? lng,
-            );
-          })
-          .whereType<Poi>()
+  static List<Poi> _parse(Map<String, dynamic> data) =>
+      (data['pois'] as List? ?? [])
+          .whereType<Map>()
+          .map((m) => Poi.fromMap(m.cast<String, dynamic>()))
+          .where(
+            (p) =>
+                p.name.isNotEmpty &&
+                p.latitude.abs() <= 90 &&
+                p.longitude.abs() <= 180 &&
+                (p.latitude != 0 || p.longitude != 0),
+          )
           .toList();
-    } catch (_) {
-      return const [];
+  static Future<List<Poi>> searchNearby(
+    double lat,
+    double lng, {
+    int limit = 10,
+    String? types,
+    int radius = 1000,
+  }) async => _parse(
+    await _get('/v3/place/around', {
+      'location': '$lng,$lat',
+      'radius': radius,
+      'types': ?types,
+      'sortrule': 'distance',
+      'offset': limit,
+      'extensions': 'all',
+    }),
+  );
+  static Future<List<Poi>> searchByName(
+    String keyword,
+    double lat,
+    double lng,
+  ) async => _parse(
+    await _get('/v3/place/text', {
+      'keywords': keyword,
+      'offset': 20,
+      'extensions': 'all',
+    }),
+  );
+  static Future<Poi?> byId(String id, double lat, double lng) async {
+    if (id.isEmpty) return null;
+    for (final path in ['/v5/place/detail', '/v3/place/detail']) {
+      try {
+        final values = _parse(
+          await _get(path, {
+            'id': id,
+            'show_fields': 'business,photos,children,indoor',
+            'extensions': 'all',
+          }),
+        );
+        if (values.isNotEmpty) return values.first;
+      } catch (_) {
+        /* v3 fallback for accounts without POI 2.0 detail access. */
+      }
     }
+    return null;
   }
 
-  static String _readStr(dynamic v) {
-    if (v is String && v.isNotEmpty) return v;
-    if (v is List && v.isNotEmpty) return v.first.toString();
-    return '';
+  static Future<Poi> details(Poi seed) async {
+    final direct = await byId(seed.id, seed.latitude, seed.longitude);
+    if (direct != null) return direct;
+    if (seed.id.isEmpty && seed.name.isNotEmpty) {
+      try {
+        final candidates = await searchByName(
+          seed.name,
+          seed.latitude,
+          seed.longitude,
+        );
+        for (final candidate in candidates) {
+          if (candidate.name == seed.name &&
+              const Distance().as(
+                    LengthUnit.Meter,
+                    LatLng(seed.latitude, seed.longitude),
+                    LatLng(candidate.latitude, candidate.longitude),
+                  ) <
+                  150) {
+            return candidate;
+          }
+        }
+      } catch (_) {}
+    }
+    return seed;
   }
 
-  /// 逆地理编码：坐标转城市 + 国家（收藏保存时用，填充 Place.city / Place.country）。
-  static Future<({String? city, String? country})> reverseGeocode(
-      double lat, double lng) async {
+  static Future<PlaceGeography> reverseGeocode(double lat, double lng) async {
+    final data = await _get('/v3/geocode/regeo', {'location': '$lng,$lat'});
+    final geo = data['regeocode'] is Map ? data['regeocode'] as Map : const {};
+    final c = geo['addressComponent'] is Map
+        ? geo['addressComponent'] as Map
+        : const {};
+    final province = Poi.read(c['province']);
+    final city = Poi.read(c['city']);
+    return (
+      city: city.isNotEmpty ? city : province,
+      province: province,
+      district: Poi.read(c['district']),
+      country: Poi.read(c['country']),
+      adcode: Poi.read(c['adcode']),
+      address: Poi.read(geo['formatted_address']),
+    );
+  }
+
+  static Future<({double latitude, double longitude})?> convertGps(
+    double lat,
+    double lng,
+  ) async {
     try {
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 8);
-      final req = await client.getUrl(Uri.parse(
-        'https://restapi.amap.com/v3/geocode/regeo'
-        '?key=${AppConfig.amapWebApiKey}&location=$lng,$lat',
-      ));
-      final res = await req.close();
-      final body = await res.transform(utf8.decoder).join();
-      final decoded = jsonDecode(body) as Map<String, dynamic>;
-      final component = (decoded['regeocode']
-              as Map<String, dynamic>?)?['addressComponent']
-          as Map<String, dynamic>?;
-      final province = _readStr(component?['province']);
-      final city = _readStr(component?['city']);
-      final country = _readStr(component?['country']);
-      return (
-        city: city.isNotEmpty ? city : (province.isNotEmpty ? province : null),
-        country: country.isNotEmpty ? country : null,
-      );
+      final data = await _get('/v3/assistant/coordinate/convert', {
+        'locations': '$lng,$lat',
+        'coordsys': 'gps',
+      });
+      final point = Poi.read(data['locations']).split(',');
+      if (point.length != 2) return null;
+      final x = double.tryParse(point[0]), y = double.tryParse(point[1]);
+      return x == null || y == null ? null : (latitude: y, longitude: x);
     } catch (_) {
-      return (city: null, country: null);
+      return null;
     }
-  }
-
-  static String _formatDistance(String meters) {
-    final m = int.tryParse(meters) ?? 0;
-    if (m <= 0) return ''; // 全国搜索无距离时返回空
-    if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)}km';
-    return '${m}m';
-  }
-
-  /// 高德 type 是「大类;中类;小类」的层级，按关键词映射到一级标签。
-  static PrimaryTag _tagFromAmapType(String type) {
-    if (type.contains('咖啡')) return PrimaryTag.coffee;
-    if (type.contains('酒店') ||
-        type.contains('宾馆') ||
-        type.contains('住宿')) {
-      return PrimaryTag.hotel;
-    }
-    if (type.contains('风景') ||
-        type.contains('名胜') ||
-        type.contains('公园') ||
-        type.contains('景点') ||
-        type.contains('博物馆') ||
-        type.contains('寺') ||
-        type.contains('教堂')) {
-      return PrimaryTag.sight;
-    }
-    if (type.contains('酒吧') || type.contains('夜店')) return PrimaryTag.bar;
-    return PrimaryTag.food; // 餐饮等默认归为美食
   }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'data/sync_manager.dart';
+import 'data/nearby_notifications.dart';
 import 'state/collection_provider.dart';
 
 void main() {
@@ -11,7 +12,13 @@ void main() {
   WidgetsBinding.instance.addObserver(SyncManager());
   runApp(
     ChangeNotifierProvider(
-      create: (_) => CollectionProvider()..load(),
+      create: (_) {
+        final provider = CollectionProvider();
+        provider.load().then(
+          (_) => NearbyNotifications.instance.attach(provider),
+        );
+        return provider;
+      },
       child: const TasteMapApp(),
     ),
   );

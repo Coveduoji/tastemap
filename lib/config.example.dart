@@ -12,4 +12,7 @@ class AppConfig {
 
   /// 高德 Web 服务 Key（用于逆地理编码 + 周边搜索）。
   static const String amapWebApiKey = '在这里填你的高德Key';
+
+  /// Android SDK Key, bound to the installed package name and signing SHA1.
+  static const String amapAndroidApiKey = '';
 }

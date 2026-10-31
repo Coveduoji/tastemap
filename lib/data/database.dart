@@ -19,7 +19,20 @@ class AppDatabase {
     final path = p.join(await getDatabasesPath(), 'tastemap.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
+      onUpgrade: (db, old, version) async {
+        if (old < 2) {
+          for (final name in [
+            'province',
+            'district',
+            'adcode',
+            'amap_id',
+            'address',
+          ]) {
+            await db.execute('ALTER TABLE places ADD COLUMN $name TEXT');
+          }
+        }
+      },
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -36,6 +49,7 @@ class AppDatabase {
         longitude REAL NOT NULL,
         city TEXT,
         country TEXT,
+        province TEXT, district TEXT, adcode TEXT, amap_id TEXT, address TEXT,
         type TEXT NOT NULL DEFAULT 'custom',
         source TEXT,
         foursquare_id TEXT,

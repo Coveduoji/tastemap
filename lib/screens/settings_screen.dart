@@ -1,22 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-
+import 'package:url_launcher/url_launcher.dart';
+import '../data/nearby_notifications.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
-import '../theme/typography.dart';
+import 'export_screen.dart';
 import 'webdav_screen.dart';
 
-/// 设置页（Profile 右上角三横线进入）。P0 为静态壳，仅「清除所有收藏」可触发。
-class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+class SettingsScreen extends StatefulWidget {
+  final Future<void> Function()? onClearMapCache;
+  const SettingsScreen({super.key, this.onClearMapCache});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
 
-  Future<void> _clearAll(BuildContext context) async {
-    final provider = context.read<CollectionProvider>();
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _busy = false;
+  void _message(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  Future<void> _clearAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清除所有收藏'),
-        content: const Text('此操作不可逆，将删除全部收藏数据。确定继续？'),
+        title: const Text('清除所有收藏？'),
+        content: const Text('此操作无法恢复。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -29,147 +37,158 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
+    final ok = await context.read<CollectionProvider>().deleteAll();
+    if (mounted) _message(ok ? '已清除' : '清除失败');
+  }
 
-    final ok = await provider.deleteAll();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? '已清除所有收藏' : '清除失败，请重试')),
+  Future<void> _notifications(bool enabled) async {
+    setState(() => _busy = true);
+    try {
+      if (enabled && !await NearbyNotifications.instance.enable()) {
+        if (mounted) _message('请开启通知和定位权限');
+        return;
+      }
+      if (!mounted) return;
+      final ok = await context.read<CollectionProvider>().setPreference(
+        'nearby_reminders',
+        enabled ? '1' : '0',
+      );
+      if (mounted && !ok) _message('保存失败');
+    } catch (_) {
+      if (mounted) _message('暂时无法开启提醒');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _version() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      showAboutDialog(
+        context: context,
+        applicationName: '品味地图',
+        applicationVersion: '${info.version} (${info.buildNumber})',
+      );
+    }
+  }
+
+  Future<void> _feedback() async {
+    final info = await PackageInfo.fromPlatform();
+    await launchUrl(
+      Uri.https('github.com', '/Coveduoji/tastemap/issues/new', {
+        'title': '使用反馈',
+        'body': '版本：${info.version}\n\n问题描述：\n',
+      }),
+      mode: LaunchMode.externalApplication,
     );
+  }
+
+  Future<void> _clearMapCache() async {
+    try {
+      await widget.onClearMapCache?.call();
+      PaintingBinding.instance.imageCache.clear();
+      if (mounted) _message('已清理');
+    } catch (_) {
+      if (mounted) _message('清理失败');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<CollectionProvider>();
     return Scaffold(
-      backgroundColor: AppColors.warmWhite,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 10, 16, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+      appBar: AppBar(title: const Text('设置')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _group([
+            _item(
+              Icons.cloud_sync_outlined,
+              '坚果云同步',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WebDavScreen()),
+              ),
+            ),
+            _item(
+              Icons.file_upload_outlined,
+              '导出数据',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ExportScreen()),
+              ),
+            ),
+          ]),
+          _group([
+            _item(Icons.cleaning_services_outlined, '清理地图缓存', _clearMapCache),
+            SwitchListTile(
+              title: const Text('附近收藏提醒'),
+              subtitle: const Text('使用应用时'),
+              secondary: const Icon(Icons.notifications_outlined),
+              value: provider.nearbyReminders,
+              onChanged: _busy ? null : _notifications,
+            ),
+            if (provider.nearbyReminders)
+              _item(
+                Icons.notifications_active_outlined,
+                '测试提醒',
+                () => NearbyNotifications.instance.test(),
+              ),
+          ]),
+          _group([
+            _item(Icons.info_outline, '版本信息', _version),
+            _item(Icons.feedback_outlined, '反馈问题', _feedback),
+            _item(
+              Icons.help_outline,
+              '使用说明',
+              () => showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('使用说明'),
+                  content: const Text(
+                    '长按地图添加地点。\n搜索地点后查看详情，再收藏。\n缩小地图按国家、省、市、区查看收藏。\n下拉关闭面板。',
                   ),
-                  const SizedBox(width: 6),
-                  Text('更多', style: AppText.sectionTitle.copyWith(fontSize: 16)),
-                ],
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('完成'),
+                    ),
+                  ],
+                ),
               ),
             ),
-            Expanded(
-              child: ListView(
-                children: [
-                  _label('数据与同步'),
-                  _item(Icons.cloud_sync, AppColors.bg, '坚果云同步', 'WebDAV 备份 / 恢复',
-                      () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const WebDavScreen()))),
-                  _item(Icons.file_upload, AppColors.bg, '导出数据', '导出为 JSON / CSV'),
-                  _label('应用'),
-                  _item(Icons.map, AppColors.bg, '地图设置', '默认地图类型 · 缓存'),
-                  _item(Icons.notifications_none, AppColors.bg, '通知', '附近收藏提醒'),
-                  _label('关于'),
-                  _item(Icons.info_outline, AppColors.bg, '版本信息', 'TasteMap v1.0.0'),
-                  _item(Icons.chat_bubble_outline, AppColors.bg, '和开发者聊聊', '反馈问题 · 提建议'),
-                  _item(Icons.menu_book, AppColors.bg, '使用说明', '长按 + · 同步配置'),
-                  _label('数据管理'),
-                  _dangerItem(Icons.delete_outline, '清除所有收藏', '操作不可逆，请谨慎',
-                      () => _clearAll(context)),
-                  const SizedBox(height: 24),
-                  Text(
-                    'TasteMap · v1.0.0 · 把你喜欢的地方，钉在地图上',
-                    textAlign: TextAlign.center,
-                    style: AppText.caption.copyWith(color: AppColors.stone),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+          ]),
+          _group([
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline,
+                color: AppColors.danger,
               ),
+              title: const Text(
+                '清除所有收藏',
+                style: TextStyle(color: AppColors.danger),
+              ),
+              onTap: _clearAll,
             ),
-          ],
-        ),
+          ]),
+        ],
       ),
     );
   }
 
-  Widget _label(String text) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 5),
-      child: Text(text, style: AppText.label.copyWith(letterSpacing: 0.1)),
-    );
-  }
-
-  Widget _item(IconData icon, Color bg, String title, String subtitle,
-      [VoidCallback? onTap]) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              alignment: Alignment.center,
-              child: Icon(icon, size: 17, color: AppColors.ink),
-            ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: AppText.caption),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: AppColors.stone, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dangerItem(IconData icon, String title, String subtitle, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.dangerBg,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              alignment: Alignment.center,
-              child: Icon(icon, size: 17, color: AppColors.danger),
-            ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: AppText.body
-                          .copyWith(fontWeight: FontWeight.w500, color: AppColors.danger)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: AppText.caption),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: AppColors.stone, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _group(List<Widget> children) => Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Column(children: children),
+  );
+  Widget _item(IconData icon, String title, VoidCallback onTap) => ListTile(
+    leading: Icon(icon),
+    title: Text(title),
+    trailing: const Icon(Icons.chevron_right, size: 18),
+    onTap: onTap,
+  );
 }

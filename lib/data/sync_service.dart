@@ -23,7 +23,7 @@ class SyncService {
   /// 构建全量备份 JSON（place + collection 两张表）。
   String buildBackupJson(List<Place> places, List<Collection> collections) {
     return jsonEncode({
-      'version': 1,
+      'version': 2,
       'exported_at': DateTime.now().toIso8601String(),
       'places': places.map((p) => p.toMap()).toList(),
       'collections': collections.map((c) => c.toMap()).toList(),
@@ -32,7 +32,8 @@ class SyncService {
 
   /// 解析备份 JSON。
   ({List<Place> places, List<Collection> collections}) parseBackupJson(
-      String json) {
+    String json,
+  ) {
     final decoded = jsonDecode(json) as Map<String, dynamic>;
     final places = (decoded['places'] as List)
         .map((m) => Place.fromMap((m as Map).cast<String, Object?>()))
@@ -49,7 +50,9 @@ class SyncService {
   Future<bool> upload(String json) async {
     try {
       final data = Uint8List.fromList(utf8.encode(json));
-      await _client().write(backupPath, data);
+      final client = _client();
+      await client.mkdirAll('/TasteMap');
+      await client.write(backupPath, data);
       return true;
     } catch (_) {
       return false;

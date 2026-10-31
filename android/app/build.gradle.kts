@@ -11,6 +11,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -28,9 +29,20 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // The same ignored local SDK key is needed by the bundled positioning SDK.
+        val localConfig = rootProject.file("../lib/config.dart")
+        val localKey = if (localConfig.exists()) Regex("amapAndroidApiKey\\s*=\\s*['\"]([^'\"]+)['\"]").find(localConfig.readText())?.groupValues?.get(1) else null
+        manifestPlaceholders["AMAP_API_KEY"] = providers.environmentVariable("AMAP_ANDROID_KEY").orNull ?: localKey.orEmpty()
     }
 
     buildTypes {
+        configureEach {
+            // Opt-in side-by-side build for device QA; preserve the installed app.
+            if (providers.environmentVariable("TASTEMAP_PREVIEW").orNull == "1") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-preview"
+            }
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
@@ -41,4 +53,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("com.amap.api:3dmap-location-search:11.3.100_loc11.3.101_sea9.8.1")
 }

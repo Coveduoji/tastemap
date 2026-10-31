@@ -6,13 +6,13 @@ import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import '../theme/typography.dart';
 import '../utils/format.dart';
-import '../widgets/detail_sheet.dart';
-import 'collection_list_screen.dart';
+import '../widgets/collection_list_sheet.dart';
 import 'settings_screen.dart';
 
 /// Profile 页（头像点击进入）：Hero 卡 + 收藏统计 + 收藏格 + 城市足迹。
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  final Future<void> Function()? onClearMapCache;
+  const ProfileScreen({super.key, this.onClearMapCache});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +22,7 @@ class ProfileScreen extends StatelessWidget {
     final countries = all.map((v) => v.country).whereType<String>().toSet();
 
     return Scaffold(
-      backgroundColor: AppColors.warmWhite,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -52,131 +52,107 @@ class ProfileScreen extends StatelessWidget {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: AppColors.ink,
+            ),
           ),
           const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.push(
+          IconButton(
+            tooltip: '设置',
+            onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  SizedBox(
-                    width: 20,
-                    height: 2,
-                    child: ColoredBox(color: AppColors.ink),
-                  ),
-                  SizedBox(height: 4),
-                  SizedBox(
-                    width: 14,
-                    height: 2,
-                    child: ColoredBox(color: AppColors.ink),
-                  ),
-                  SizedBox(height: 4),
-                  SizedBox(
-                    width: 20,
-                    height: 2,
-                    child: ColoredBox(color: AppColors.ink),
-                  ),
-                ],
+              MaterialPageRoute(
+                builder: (_) =>
+                    SettingsScreen(onClearMapCache: onClearMapCache),
               ),
             ),
+            icon: const Icon(Icons.tune_rounded, color: AppColors.ink),
           ),
         ],
       ),
     );
   }
 
-  Widget _hero(BuildContext context, int total, int cityCount, int countryCount) {
+  Widget _hero(
+    BuildContext context,
+    int total,
+    int cityCount,
+    int countryCount,
+  ) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.warmWhite, AppColors.bg],
-        ),
+        color: AppColors.warmWhite,
+        borderRadius: BorderRadius.circular(28),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 58,
-                height: 58,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(13),
-                  gradient: const LinearGradient(
-                    colors: [AppColors.accent, AppColors.accentDeep],
-                  ),
-                  border: Border.all(color: AppColors.warmWhite, width: 2),
+                  color: AppColors.accentSoft,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                alignment: Alignment.center,
-                child: const Icon(Icons.person, size: 28, color: AppColors.warmWhite),
+                child: const Icon(
+                  Icons.explore_outlined,
+                  color: AppColors.accent,
+                  size: 30,
+                ),
               ),
-              const SizedBox(width: 13),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('旅行者', style: AppText.profileNick),
-                    const SizedBox(height: 3),
-                    Text('个人品味地图', style: AppText.caption.copyWith(color: AppColors.stone)),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _stat('$total', '收藏'),
-                        const SizedBox(width: 16),
-                        _stat('$cityCount', '城市'),
-                        const SizedBox(width: 16),
-                        _stat('$countryCount', '国家'),
-                      ],
-                    ),
-                  ],
+                  children: [Text('我的足迹', style: AppText.profileNick)],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            height: 88,
-            decoration: BoxDecoration(
-              color: AppColors.bg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Text(
-                    '✓ $total 个收藏分布在地图上',
-                    style: AppText.caption.copyWith(color: AppColors.stone),
-                  ),
-                ),
-                Positioned(
-                  right: 10,
-                  bottom: 8,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: AppColors.ink,
-                        borderRadius: BorderRadius.circular(17),
-                      ),
-                      child: Text('去地图看看 →',
-                          style: AppText.chip.copyWith(color: AppColors.warmWhite, fontSize: 10)),
+          const SizedBox(height: 28),
+          Row(
+            children: [
+              Expanded(child: _stat('$total', '收藏地点')),
+              Expanded(child: _stat('$cityCount', '探索城市')),
+              Expanded(child: _stat('$countryCount', '到访国家')),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Material(
+            color: AppColors.accentSoft,
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => Navigator.pop(context),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.map_outlined,
+                      color: AppColors.accent,
+                      size: 22,
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '查看地图',
+                        style: AppText.chip.copyWith(color: AppColors.accent),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: AppColors.accent,
+                      size: 18,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ],
@@ -188,9 +164,12 @@ class ProfileScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(num, style: AppText.sectionTitle.copyWith(fontSize: 17)),
-        const SizedBox(height: 1),
-        Text(label, style: AppText.caption.copyWith(color: AppColors.stone, fontSize: 9)),
+        Text(
+          num,
+          style: AppText.sectionTitle.copyWith(fontSize: 30, letterSpacing: -1),
+        ),
+        const SizedBox(height: 6),
+        Text(label, style: AppText.caption),
       ],
     );
   }
@@ -202,40 +181,45 @@ class ProfileScreen extends StatelessWidget {
     return _sectionCard(
       title: '我的收藏',
       count: all.length,
-      onMore: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const CollectionListScreen()),
-      ),
-      child: GridView.count(
-        crossAxisCount: 3,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 6,
-        childAspectRatio: 1,
-        children: [
-          ...recent.map((v) => _collectionTile(context, v)),
-          if (remaining > 0) _moreTile(remaining),
-        ],
-      ),
+      onMore: () => _chooseCollection(context),
+      child: all.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                '收藏一处喜欢，开启你的品味地图。',
+                style: AppText.body.copyWith(color: AppColors.stone),
+              ),
+            )
+          : GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1,
+              children: [
+                ...recent.map((v) => _collectionTile(context, v)),
+                if (remaining > 0) _moreTile(remaining),
+              ],
+            ),
     );
+  }
+
+  Future<void> _chooseCollection(BuildContext context) async {
+    final selected = await showCollectionList(context);
+    if (selected != null && context.mounted) Navigator.pop(context, selected);
   }
 
   Widget _collectionTile(BuildContext context, CollectionView v) {
     return GestureDetector(
-      onTap: () => showModalBottomSheet<bool>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => DetailSheet(view: v),
-      ),
+      onTap: () => Navigator.pop(context, v),
       child: Stack(
         children: [
           Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: v.tag.bubbleColor,
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -248,7 +232,10 @@ class ProfileScreen extends StatelessWidget {
                     v.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppText.caption.copyWith(fontSize: 7, color: AppColors.ink),
+                    style: AppText.caption.copyWith(
+                      fontSize: 12,
+                      color: AppColors.ink,
+                    ),
                   ),
                 ),
               ],
@@ -276,14 +263,17 @@ class ProfileScreen extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.bg,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.cardBorder, width: 1.5),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('+$remaining', style: AppText.sectionTitle.copyWith(color: AppColors.stone)),
-          Text('更多', style: AppText.caption.copyWith(fontSize: 7)),
+          Text(
+            '+$remaining',
+            style: AppText.sectionTitle.copyWith(color: AppColors.stone),
+          ),
+          Text('更多', style: AppText.caption.copyWith(fontSize: 12)),
         ],
       ),
     );
@@ -301,7 +291,17 @@ class ProfileScreen extends StatelessWidget {
     return _sectionCard(
       title: '城市足迹',
       child: Column(
-        children: rows.map((e) => _cityRow(e.key, e.value)).toList(),
+        children: rows.isEmpty
+            ? [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Text(
+                    '下一座城市，等你点亮',
+                    style: AppText.body.copyWith(color: AppColors.stone),
+                  ),
+                ),
+              ]
+            : rows.map((e) => _cityRow(e.key, e.value)).toList(),
       ),
     );
   }
@@ -311,7 +311,7 @@ class ProfileScreen extends StatelessWidget {
     final earliest = views
         .map((v) => v.createdAt)
         .where((s) => s.isNotEmpty)
-        .reduce((a, b) => a.compareTo(b) < 0 ? a : b);
+        .fold<String>('', (a, b) => a.isEmpty || b.compareTo(a) < 0 ? b : a);
     final dateText = earliest.isEmpty ? '' : formatYearMonth(earliest);
 
     return Padding(
@@ -326,23 +326,34 @@ class ProfileScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(9),
             ),
             alignment: Alignment.center,
-            child: Text(_flagFor(country), style: const TextStyle(fontSize: 16)),
+            child: Text(
+              _flagFor(country),
+              style: const TextStyle(fontSize: 16),
+            ),
           ),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(city, style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
                 Text(
-                  [country, dateText].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                  city,
+                  style: AppText.body.copyWith(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  [
+                    country,
+                    dateText,
+                  ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
                   style: AppText.caption,
                 ),
               ],
             ),
           ),
-          Text('${views.length} 个',
-              style: AppText.chip.copyWith(color: AppColors.accent)),
+          Text(
+            '${views.length} 个',
+            style: AppText.chip.copyWith(color: AppColors.accent),
+          ),
         ],
       ),
     );
@@ -362,30 +373,41 @@ class ProfileScreen extends StatelessWidget {
     VoidCallback? onMore,
   }) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 11, 14, 0),
-      padding: const EdgeInsets.all(13),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 1))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               Text(title, style: AppText.sectionTitle),
-              if (count != null) ...[
-                const SizedBox(width: 4),
-                Text('· $count', style: AppText.caption),
-              ],
-              const Spacer(),
+              if (count != null) ...[Text('· $count', style: AppText.caption)],
               if (onMore != null)
                 GestureDetector(
                   onTap: onMore,
-                  child: Text('查看全部 ›',
-                      style: AppText.chip
-                          .copyWith(color: AppColors.accent, fontSize: 10)),
+                  child: Text(
+                    '查看全部 ›',
+                    style: AppText.chip.copyWith(
+                      color: AppColors.accent,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
             ],
           ),

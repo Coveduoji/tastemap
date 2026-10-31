@@ -1,531 +1,939 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
-
+import 'dart:async';
+import 'package:amap_location_flutter/amap_location_flutter.dart';
+import 'package:amap_location_flutter/amap_location_option.dart' as location;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
-import '../models/collection_view.dart';
+import '../data/collection_repository.dart';
+import '../data/poi_search.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
-import '../theme/typography.dart';
+import '../utils/administrative_clusters.dart';
 import '../widgets/detail_sheet.dart';
-import '../widgets/empty_state.dart';
+import '../widgets/native_amap.dart';
 import '../widgets/pin_marker.dart';
 import '../widgets/poi_sheet.dart';
+import '../widgets/collection_list_sheet.dart';
+import '../models/collection_view.dart';
+import '../widgets/place_details_sheet.dart';
+import 'place_search.dart';
 import 'profile_screen.dart';
 
-const LatLng kDefaultCenter = LatLng(39.9092, 116.3974); // 北京（高德国内瓦片覆盖）
-const double kDefaultZoom = 13.5;
+const kDefaultCenter = LatLng(39.9092, 116.3974);
+const kDefaultZoom = 16.0;
 
-/// 地图首页：全屏地图 + 浮动 UI（无底部 Tab，DDR-01）。
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
-
+  final Poi? initialPlace;
+  const MapScreen({super.key, this.initialPlace});
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
 class _MapScreenState extends State<MapScreen> {
-  final MapController _mapController = MapController();
-  LatLngBounds? _visibleBounds;
+  final _fallback = MapController();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  PersistentBottomSheetController? _detailSheet;
+  Poi? _focusedPlace;
+  bool _locationEnabled = false, _locating = false;
+  int _interactionEpoch = 0;
+  final _areaLabel = ValueNotifier<String>('地图');
+  Timer? _areaTimer;
+  LatLng? _lastAreaCenter;
+  int _areaRequest = 0;
+  NativeMapController? _nativeController;
   LatLng _center = kDefaultCenter;
   double _zoom = kDefaultZoom;
-  String? _cityName;
-  bool _showSheet = false;
-  bool _startManual = false;
-  final GlobalKey<PoiSheetState> _poiSheetKey = GlobalKey<PoiSheetState>();
-
+  bool _native = false,
+      _fallbackReady = false,
+      _tip = false,
+      _collecting = false,
+      _backfilled = false;
+  String _signature = '';
+  List<PlaceCluster> _markers = [];
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestLocation());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _setup());
   }
 
-  Future<bool> _requestLocation({bool notify = false}) async {
-    try {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        final granted = await Geolocator.requestPermission();
-        if (granted != LocationPermission.whileInUse &&
-            granted != LocationPermission.always) {
-          if (notify) _showLocationGuide();
-          return false; // 静默降级到默认坐标（首次启动不强求定位）
-        }
-      } else if (permission == LocationPermission.deniedForever) {
-        if (notify) _showLocationGuide();
-        return false;
-      }
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        if (notify) _showLocationGuide();
-        return false;
-      }
+  @override
+  void dispose() {
+    _areaTimer?.cancel();
+    _areaLabel.dispose();
+    _fallback.dispose();
+    super.dispose();
+  }
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: AndroidSettings(forceLocationManager: true),
+  Future<void> _setup() async {
+    final provider = context.read<CollectionProvider>();
+    final tip = await provider.claimFirstMapTip();
+    if (!mounted) return;
+    setState(() => _tip = tip);
+    if (widget.initialPlace != null) {
+      _move(
+        LatLng(widget.initialPlace!.latitude, widget.initialPlace!.longitude),
+        16,
       );
-      if (!mounted) return false;
-      setState(() => _center = LatLng(pos.latitude, pos.longitude));
-      _mapController.move(_center, kDefaultZoom);
-      _reverseGeocode(LatLng(pos.latitude, pos.longitude));
-      return true;
-    } catch (_) {
-      // 定位失败：保持默认坐标，不阻塞
-      if (notify) _showLocationGuide();
-      return false;
+    } else if (provider.all.isNotEmpty) {
+      final place = provider.all.first;
+      _areaLabel.value = place.city ?? place.place.province ?? '地图';
+      _move(LatLng(place.latitude, place.longitude), kDefaultZoom);
     }
-  }
-
-  Future<void> _locateMe() async {
-    await _requestLocation(notify: true);
-  }
-
-  Future<void> _reverseGeocode(LatLng pos) async {
-    try {
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 8);
-      final req = await client.getUrl(Uri.parse(
-        'https://restapi.amap.com/v3/geocode/regeo'
-        '?key=${AppConfig.amapWebApiKey}'
-        '&location=${pos.longitude},${pos.latitude}',
-      ));
-      final res = await req.close();
-      final body = await res.transform(utf8.decoder).join();
-      final decoded = jsonDecode(body) as Map<String, dynamic>;
-      final component = (decoded['regeocode']
-              as Map<String, dynamic>?)?['addressComponent']
-          as Map<String, dynamic>?;
-      // 高德字段可能是字符串、空数组 []（直辖市 city）或 null，需健壮解析
-      String? readStr(dynamic v) {
-        if (v is String && v.isNotEmpty) return v;
-        if (v is List && v.isNotEmpty) return v.first.toString();
-        return null;
+    if (Platform.isAndroid && AppConfig.amapAndroidApiKey.isNotEmpty) {
+      final repo = CollectionRepository();
+      var consent = await repo.getSetting('amap_native_consent') == '1';
+      if (!mounted) return;
+      if (!consent) {
+        consent =
+            await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('使用高德地图'),
+                content: const Text('地图由高德提供，将联网加载地图和地点信息。定位仍需系统授权。'),
+                actions: [
+                  TextButton(
+                    onPressed: () => launchUrl(
+                      Uri.parse('https://lbs.amap.com/pages/privacy/'),
+                    ),
+                    child: const Text('隐私政策'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('暂不使用'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('同意并使用'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (consent) await repo.setSetting('amap_native_consent', '1');
       }
-
-      final province = readStr(component?['province']);
-      final city = readStr(component?['city']);
-      final district = readStr(component?['district']);
-      final base = city ?? province; // 直辖市 city 为空时回退到 province
-      if (base != null && mounted) {
-        final label = (district != null && district != base)
-            ? '$base · $district'
-            : base;
-        setState(() => _cityName = label);
-      }
-      client.close();
-    } catch (_) {
-      // 逆地理失败：保持「当前位置」占位
+      if (mounted && consent) setState(() => _native = true);
     }
-  }
-
-  void _showLocationGuide() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('未获取定位，当前显示默认位置（北京）')),
-    );
-  }
-
-  void _onSelectLocation(double lat, double lng) {
-    _mapController.move(LatLng(lat, lng), 15);
-  }
-
-  void _openCollectionFlow() {
-    setState(() {
-      _showSheet = true;
-      _startManual = false;
-    });
-  }
-
-  /// 长按「+」：跳过附近地点列表，直接对当前钉子位置（拖图后的地图中心）命名。
-  /// 用于地图上没有对应 POI 的位置，如秋千、拍照机位——先拖图把钉子放准，再长按命名。
-  void _onFabLongPress() {
-    HapticFeedback.mediumImpact();
-    if (_showSheet) {
-      _poiSheetKey.currentState?.startManualEntry();
+    if (!mounted) return;
+    if (widget.initialPlace != null) {
+      await _details(widget.initialPlace!);
     } else {
-      setState(() {
-        _showSheet = true;
-        _startManual = true;
-      });
+      await _locate();
     }
   }
 
-  Future<void> _openDetail(CollectionView view) async {
-    await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DetailSheet(view: view),
-    );
-  }
-
-  void _openProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    );
-  }
-
-  List<Marker> _buildMarkers(List<CollectionView> views) {
-    // 按当前缩放级别做距离聚类：40px 视距内的点合并为一个数字气泡（P1 聚合）
-    final threshold = 40 * 360 / (256 * math.pow(2, _zoom));
-    final clusters = <_Cluster>[];
-    for (final v in views) {
-      _Cluster? target;
-      for (final c in clusters) {
-        if (c.distanceTo(v) < threshold) {
-          target = c;
-          break;
-        }
-      }
-      if (target != null) {
-        target.add(v);
-      } else {
-        clusters.add(_Cluster(v));
-      }
-    }
-
-    final markers = clusters.map((c) {
-      if (c.views.length == 1) {
-        final v = c.views.first;
-        return Marker(
-          point: LatLng(v.latitude, v.longitude),
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          child: GestureDetector(
-            onTap: () => _openDetail(v),
-            child: PinMarker(tag: v.tag, visited: v.visited),
-          ),
-        );
-      }
-      return Marker(
-        point: LatLng(c.lat, c.lng),
-        width: 40,
-        height: 40,
-        child: _clusterBubble(c.views.length),
-      );
-    }).toList();
-
-    return markers;
-  }
-
-  Widget _clusterBubble(int count) {
-    return GestureDetector(
-      onTap: _zoomIn,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: AppColors.accent,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.warmWhite, width: 2.5),
-          boxShadow: [
-            BoxShadow(
-                color: AppColors.accent.withValues(alpha: 0.35),
-                blurRadius: 8,
-                offset: const Offset(0, 3)),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          '$count',
-          style: AppText.chip.copyWith(color: AppColors.warmWhite),
-        ),
+  void _locationMessage(
+    String message, {
+    bool appSettings = false,
+    bool locationSettings = false,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: appSettings || locationSettings
+            ? SnackBarAction(
+                label: '设置',
+                onPressed: () {
+                  if (appSettings) {
+                    Geolocator.openAppSettings();
+                  } else {
+                    Geolocator.openLocationSettings();
+                  }
+                },
+              )
+            : null,
       ),
     );
   }
 
-  void _zoomIn() {
-    final cam = _mapController.camera;
-    _mapController.move(cam.center, cam.zoom + 1);
+  Future<LatLng> _requestAmapLocation() async {
+    final client = AmapLocationFlutter();
+    final result = Completer<LatLng>();
+    final subscription = client.onLocationChanged().listen(
+      (event) {
+        if (result.isCompleted) return;
+        final code = int.tryParse('${event['errorCode'] ?? 0}') ?? -1;
+        if (code != 0) {
+          result.completeError(StateError('定位服务暂不可用（$code）'));
+          return;
+        }
+        final lat = double.tryParse('${event['latitude']}');
+        final lng = double.tryParse('${event['longitude']}');
+        if (lat == null ||
+            lng == null ||
+            !lat.isFinite ||
+            !lng.isFinite ||
+            lat.abs() > 90 ||
+            lng.abs() > 180 ||
+            (lat == 0 && lng == 0)) {
+          result.completeError(StateError('未获取到有效位置'));
+          return;
+        }
+        result.complete(LatLng(lat, lng));
+      },
+      onError: (Object error) {
+        if (!result.isCompleted) result.completeError(error);
+      },
+    );
+    try {
+      // This is invoked only after the existing map consent and OS permission gate.
+      AmapLocationFlutter.setApiKey(AppConfig.amapAndroidApiKey, '');
+      client.setLocationOption(
+        location.AMapLocationOption(
+          onceLocation: true,
+          needAddress: false,
+          locationMode: location.AMapLocationMode.Hight_Accuracy,
+        ),
+      );
+      client.startLocation();
+      return await result.future.timeout(const Duration(seconds: 20));
+    } finally {
+      client.stopLocation();
+      client.destroy();
+      await subscription.cancel();
+    }
   }
 
-  int _nearbyCount(List<CollectionView> views) {
-    final bounds = _visibleBounds;
-    if (bounds == null) return 0;
-    return views
-        .where((v) => bounds.contains(LatLng(v.latitude, v.longitude)))
-        .length;
+  Future<void> _locate({bool interactive = false}) async {
+    if (_locating) return;
+    final epoch = _interactionEpoch;
+    setState(() => _locating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (interactive) _locationMessage('请开启系统定位', locationSettings: true);
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (!mounted) return;
+      if (permission == LocationPermission.deniedForever) {
+        if (interactive) _locationMessage('请允许位置访问', appSettings: true);
+        return;
+      }
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        if (interactive) _locationMessage('尚未获得定位权限');
+        return;
+      }
+      LatLng point;
+      if (_native) {
+        // Use the location plugin's result stream, independent of map-rendering callbacks.
+        setState(() => _locationEnabled = true);
+        point = await _requestAmapLocation();
+      } else {
+        // Explicitly use Android's system provider instead of an unavailable GMS fused provider.
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: Platform.isAndroid
+              ? AndroidSettings(
+                  forceLocationManager: true,
+                  accuracy: LocationAccuracy.medium,
+                  timeLimit: const Duration(seconds: 25),
+                )
+              : const LocationSettings(
+                  accuracy: LocationAccuracy.medium,
+                  timeLimit: Duration(seconds: 25),
+                ),
+        );
+        final converted = await PoiSearchService.convertGps(
+          position.latitude,
+          position.longitude,
+        );
+        if (converted == null) throw StateError('坐标转换失败');
+        point = LatLng(converted.latitude, converted.longitude);
+      }
+      if (mounted &&
+          epoch == _interactionEpoch &&
+          _focusedPlace == null &&
+          !_collecting) {
+        _move(point, 16);
+      }
+    } on TimeoutException {
+      if (interactive) _locationMessage('定位超时，请稍后重试');
+    } on StateError catch (error) {
+      if (interactive) _locationMessage(error.message.toString());
+    } catch (_) {
+      if (interactive) _locationMessage('定位失败，请检查网络与位置权限');
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  void _queueArea(LatLng point) {
+    if (_focusedPlace != null) return;
+    _areaTimer?.cancel();
+    final request = ++_areaRequest;
+    if (_lastAreaCenter != null &&
+        const Distance().as(LengthUnit.Meter, _lastAreaCenter!, point) < 800) {
+      return;
+    }
+    _areaTimer = Timer(const Duration(milliseconds: 600), () async {
+      try {
+        final area = await PoiSearchService.reverseGeocode(
+          point.latitude,
+          point.longitude,
+        );
+        if (!mounted || request != _areaRequest || _focusedPlace != null) {
+          return;
+        }
+        final label = [
+          area.city,
+          area.province,
+          area.country,
+        ].whereType<String>().where((s) => s.isNotEmpty).firstOrNull;
+        if (label != null) {
+          _areaLabel.value = label;
+          _lastAreaCenter = point;
+        }
+      } catch (_) {
+        /* Keep the last known area when networking is unavailable. */
+      }
+    });
+  }
+
+  void _move(LatLng point, double zoom) {
+    setState(() {
+      _center = point;
+      _zoom = zoom;
+    });
+    _queueArea(point);
+    if (_native) {
+      _nativeController?.move(point, zoom);
+    } else if (_fallbackReady) {
+      _fallback.move(point, zoom);
+    }
+  }
+
+  void _camera(NativeMapCamera camera) {
+    final previousLevel = AdministrativeClusters.level(_zoom);
+    _center = camera.center;
+    _zoom = camera.zoom;
+    _queueArea(camera.center);
+    if (mounted && previousLevel != AdministrativeClusters.level(_zoom)) {
+      setState(() {});
+    }
+  }
+
+  void _showCollection(CollectionView view) {
+    _interactionEpoch++;
+    _areaLabel.value = view.city ?? view.place.province ?? _areaLabel.value;
+    final provider = context.read<CollectionProvider>();
+    if (provider.selectedTag != null && provider.selectedTag != view.tag) {
+      provider.setTag(null);
+    }
+    _move(LatLng(view.latitude, view.longitude), 17);
+  }
+
+  Future<void> _collections() async {
+    final selected = await showCollectionList(context);
+    if (selected != null && mounted) _showCollection(selected);
+  }
+
+  Future<void> _profile() async {
+    final selected = await Navigator.push<CollectionView>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          onClearMapCache: () async {
+            await _nativeController?.clearCache();
+          },
+        ),
+      ),
+    );
+    if (selected != null && mounted) _showCollection(selected);
+  }
+
+  void _syncMarkers() {
+    final controller = _nativeController;
+    if (!_native || controller == null) return;
+    final signature =
+        '${_markers.map((g) => '${g.id}:${g.title}:${g.members.length}:${g.members.first.tag.name}:${g.members.first.visited}:${g.point.latitude}:${g.point.longitude}').join('|')}:focus:${_focusedPlace?.id}:${_focusedPlace?.latitude}:${_focusedPlace?.longitude}';
+    if (signature == _signature) return;
+    _signature = signature;
+    final payload = _markers
+        .map(
+          (g) => <String, dynamic>{
+            'id': g.id,
+            'title': g.title,
+            'lat': g.point.latitude,
+            'lng': g.point.longitude,
+            'cluster': !g.isPlace,
+            'count': g.members.length,
+            'label': g.isPlace,
+            'icon': g.members.first.tag.icon.codePoint,
+            'visited': g.members.first.visited,
+          },
+        )
+        .toList();
+    final focused = _focusedPlace;
+    if (focused != null &&
+        !payload.any(
+          (marker) =>
+              ((marker['lat'] as num) - focused.latitude).abs() < .00001 &&
+              ((marker['lng'] as num) - focused.longitude).abs() < .00001,
+        )) {
+      payload.add({
+        'id': 'detail:selected',
+        'title': focused.name,
+        'lat': focused.latitude,
+        'lng': focused.longitude,
+        'cluster': false,
+        'count': 1,
+        'icon': focused.category.icon.codePoint,
+        'visited': true,
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) controller.markers(payload);
+    });
+  }
+
+  void _markerTap(String id) {
+    final group = _markers.where((g) => g.id == id).firstOrNull;
+    if (group == null) return;
+    if (!group.isPlace) {
+      _move(group.point, group.nextZoom);
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      enableDrag: true,
+      showDragHandle: true,
+      builder: (_) => DetailSheet(view: group.members.first),
+    );
+  }
+
+  Future<void> _dismissDetails() async {
+    final sheet = _detailSheet;
+    if (sheet == null) return;
+    sheet.close();
+    await sheet.closed;
+  }
+
+  Future<void> _details(Poi poi) async {
+    _interactionEpoch++;
+    _areaTimer?.cancel();
+    _areaRequest++;
+    if (poi.city.isNotEmpty) _areaLabel.value = poi.city;
+    await _dismissDetails();
+    if (!mounted) return;
+    setState(() {
+      _focusedPlace = poi;
+    });
+    _move(LatLng(poi.latitude, poi.longitude), 16);
+    final sheet = _scaffoldKey.currentState!.showBottomSheet(
+      (context) => DraggableScrollableSheet(
+        initialChildSize: .56,
+        minChildSize: .2,
+        maxChildSize: .9,
+        expand: false,
+        shouldCloseOnMinExtent: true,
+        snap: true,
+        snapSizes: const [.56],
+        snapAnimationDuration: const Duration(milliseconds: 200),
+        builder: (_, scroll) => PlaceDetailsSheet(
+          place: poi,
+          scrollController: scroll,
+          onCollect: (place) async {
+            await _dismissDetails();
+            if (mounted) await _collection(poi: place);
+          },
+          onPlaceSelected: _details,
+        ),
+      ),
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 280),
+        reverseDuration: Duration(milliseconds: 220),
+      ),
+      showDragHandle: false,
+      enableDrag: false,
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      clipBehavior: Clip.antiAlias,
+    );
+    _detailSheet = sheet;
+    final closed = sheet.closed.whenComplete(() {
+      if (mounted && identical(_detailSheet, sheet)) {
+        setState(() {
+          _detailSheet = null;
+          _focusedPlace = null;
+        });
+        _queueArea(_center);
+      }
+    });
+    final lift = MediaQuery.sizeOf(context).height * .28;
+    if (_native) {
+      await _nativeController?.focus(
+        LatLng(poi.latitude, poi.longitude),
+        16,
+        lift,
+      );
+    } else if (_fallbackReady) {
+      _fallback.move(
+        LatLng(poi.latitude, poi.longitude),
+        16,
+        offset: Offset(0, -lift),
+      );
+    }
+    await closed;
+  }
+
+  Future<void> _search() async {
+    _interactionEpoch++;
+    final result = await showSearch<Poi?>(
+      context: context,
+      delegate: PlaceSearch(_center.latitude, _center.longitude),
+    );
+    if (result != null && mounted) {
+      await _details(result);
+    }
+  }
+
+  Future<void> _collection({Poi? poi, bool manual = false}) async {
+    if (_collecting) return;
+    _interactionEpoch++;
+    await _dismissDetails();
+    if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _collecting = true);
+    var saved = false;
+    final selected = await showModalBottomSheet<Poi>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      enableDrag: true,
+      showDragHandle: true,
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 280),
+        reverseDuration: Duration(milliseconds: 220),
+      ),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: .6,
+        minChildSize: .25,
+        maxChildSize: .92,
+        expand: false,
+        shouldCloseOnMinExtent: true,
+        builder: (_, scroll) => PoiSheet(
+          center: _center,
+          scrollController: scroll,
+          initialPoi: poi,
+          startManual: manual,
+          onDetails: (value) => Navigator.pop(sheetContext, value),
+          onSaved: () {
+            saved = true;
+            Navigator.pop(sheetContext);
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _collecting = false);
+    if (saved) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已收藏')));
+    }
+    if (selected != null) await _details(selected);
+  }
+
+  void _backfill(CollectionProvider provider) {
+    if (_backfilled || !provider.loaded) return;
+    _backfilled = true;
+    final places = provider.all
+        .map((v) => v.place)
+        .where(
+          (p) =>
+              p.province?.isNotEmpty != true || p.district?.isNotEmpty != true,
+        )
+        .toList();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      for (final p in places) {
+        if (!mounted) return;
+        try {
+          final geo = await PoiSearchService.reverseGeocode(
+            p.latitude,
+            p.longitude,
+          );
+          await provider.enrichPlace(
+            p.copyWith(
+              province: geo.province,
+              city: geo.city,
+              district: geo.district,
+              country: geo.country,
+              adcode: geo.adcode,
+              address: p.address?.isNotEmpty == true ? p.address : geo.address,
+            ),
+          );
+        } catch (_) {}
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<CollectionProvider>();
-    final views = provider.filtered;
-    final nearby = _nearbyCount(views);
-
+    _markers = AdministrativeClusters.build(provider.filtered, _zoom);
+    _backfill(provider);
+    _syncMarkers();
     return Scaffold(
+      key: _scaffoldKey,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _center,
-              initialZoom: kDefaultZoom,
-              onMapReady: () {
-                _visibleBounds = _mapController.camera.visibleBounds;
-                _zoom = _mapController.camera.zoom;
-                setState(() {});
-              },
-              onMapEvent: (e) {
-                if (e is MapEventMoveEnd ||
-                    e is MapEventFlingAnimationEnd) {
-                  setState(() {
-                    _visibleBounds = _mapController.camera.visibleBounds;
-                    _zoom = _mapController.camera.zoom;
-                    _center = _mapController.camera.center;
-                  });
-                  // 地图拖动后，以地图中心为准刷新附近地点
-                  _poiSheetKey.currentState
-                      ?.reloadNearby(_mapController.camera.center);
-                }
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}',
-                subdomains: const ['1', '2', '3', '4'],
-                userAgentPackageName: 'com.tastemap.tastemap',
-              ),
-              MarkerLayer(markers: _buildMarkers(views)),
-            ],
-          ),
-
-          // ── 顶部浮动 UI ──
-          SafeArea(
-            child: Column(
-              children: [
-                if (nearby > 0) _nearbyBadge(nearby),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-                  child: Row(
-                    children: [
-                      Expanded(child: _cityPill()),
-                      const SizedBox(width: 10),
-                      _iconBtn(Icons.search, _openCollectionFlow),
-                      const SizedBox(width: 10),
-                      _avatarBtn(_openProfile),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── 空态 ──
-          if (views.isEmpty)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: EmptyState(),
-              ),
-            ),
-
-          // ── 中心钉子（拖图模式） ──
-          if (_showSheet)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Center(
-                  child: Transform.translate(
-                    offset: const Offset(0, -18),
-                    child: const Icon(Icons.location_on, size: 34, color: AppColors.accent),
-                  ),
-                ),
-              ),
-            ),
-
-          // ── 收藏弹层（非模态，地图可拖动） ──
-          if (_showSheet)
-            Positioned.fill(
-              child: DraggableScrollableSheet(
-                initialChildSize: 0.5,
-                minChildSize: 0.5,
-                maxChildSize: 0.75,
-                expand: false,
-                builder: (context, scrollController) => PoiSheet(
-                  key: _poiSheetKey,
-                  center: _center,
-                  scrollController: scrollController,
-                  startManual: _startManual,
-                  onSelectLocation: _onSelectLocation,
-                  onClose: () => setState(() => _showSheet = false),
-                  onSaved: () {
-                    setState(() => _showSheet = false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✓ 已收藏'),
-                        duration: Duration(seconds: 2),
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: _native
+                  ? NativeAMap(
+                      apiKey: AppConfig.amapAndroidApiKey,
+                      center: _center,
+                      zoom: _zoom,
+                      locationEnabled: _locationEnabled,
+                      logoBottomInset: _focusedPlace == null
+                          ? 110
+                          : MediaQuery.sizeOf(context).height -
+                                MediaQuery.paddingOf(context).top -
+                                32,
+                      onCreated: (controller) {
+                        setState(() {
+                          _nativeController = controller;
+                          _signature = '';
+                        });
+                        final focused = _focusedPlace;
+                        if (focused == null) {
+                          controller.move(_center, _zoom);
+                        } else {
+                          controller.focus(
+                            LatLng(focused.latitude, focused.longitude),
+                            16,
+                            MediaQuery.sizeOf(context).height * .28,
+                          );
+                        }
+                      },
+                      onCamera: _camera,
+                      onTap: (_) {},
+                      onLongPress: (point) {
+                        _move(point, _zoom);
+                        _collection(manual: true);
+                      },
+                      onPoi: (p) {
+                        final poi = Poi(
+                          id: p['id'] as String? ?? '',
+                          name: p['name'] as String? ?? '',
+                          addr: '',
+                          distance: '',
+                          latitude: (p['lat'] as num).toDouble(),
+                          longitude: (p['lng'] as num).toDouble(),
+                        );
+                        _move(LatLng(poi.latitude, poi.longitude), 16);
+                        _collection(poi: poi);
+                      },
+                      onMarker: _markerTap,
+                    )
+                  : FlutterMap(
+                      mapController: _fallback,
+                      options: MapOptions(
+                        initialCenter: _center,
+                        initialZoom: _zoom,
+                        maxZoom: 19,
+                        onMapReady: () {
+                          _fallbackReady = true;
+                        },
+                        onPositionChanged: (camera, _) => _camera(
+                          NativeMapCamera(camera.center, camera.zoom),
+                        ),
+                        onLongPress: (_, point) {
+                          _move(point, _zoom);
+                          _collection(manual: true);
+                        },
                       ),
-                    );
-                  },
-                ),
-              ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}',
+                          subdomains: const ['1', '2', '3', '4'],
+                          userAgentPackageName: 'com.tastemap.tastemap',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            if (_focusedPlace != null)
+                              Marker(
+                                point: LatLng(
+                                  _focusedPlace!.latitude,
+                                  _focusedPlace!.longitude,
+                                ),
+                                width: 40,
+                                height: 40,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  size: 36,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                            ..._markers.map(
+                              (g) => Marker(
+                                point: g.point,
+                                width: g.isPlace ? 180 : 140,
+                                height: g.isPlace ? 86 : 44,
+                                alignment: g.isPlace
+                                    ? Marker.computePixelAlignment(
+                                        width: 180,
+                                        height: 86,
+                                        left: 90,
+                                        top: 71,
+                                      )
+                                    : Alignment.center,
+                                child: Center(
+                                  child: GestureDetector(
+                                    onTap: () => _markerTap(g.id),
+                                    child: g.isPlace
+                                        ? FavoriteMarker(
+                                            name: g.title,
+                                            tag: g.members.first.tag,
+                                            visited: g.members.first.visited,
+                                          )
+                                        : Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.accent,
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                            ),
+                                            child: Text(
+                                              '${g.title} · ${g.members.length}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
             ),
-
-          // ── 定位按钮 ──
-          Positioned(
-            right: 16,
-            bottom: 112,
-            child: _iconBtn(Icons.my_location, _locateMe),
           ),
-
-          // ── FAB ──
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 112,
-            child: Center(
-              child: GestureDetector(
-                onTap: _openCollectionFlow,
-                onLongPress: _onFabLongPress,
-                child: Container(
-                  width: 62,
-                  height: 62,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.accent.withValues(alpha: 0.35),
-                        blurRadius: 24,
-                        offset: const Offset(0, 6),
+          if (_focusedPlace == null)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _surface(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 13,
+                              ),
+                              child: ValueListenableBuilder<String>(
+                                valueListenable: _areaLabel,
+                                builder: (_, label, _) => Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _button(Icons.search, _search, '搜索'),
+                        const SizedBox(width: 10),
+                        _button(Icons.person_outline, _profile, '我的'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 36,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: const Text('全部'),
+                              selected: provider.selectedTag == null,
+                              onSelected: (_) => provider.setTag(null),
+                            ),
+                          ),
+                          ...provider.tagOptions.map(
+                            (tag) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(tag.label),
+                                selected: provider.selectedTag == tag,
+                                onSelected: (_) => provider.setTag(tag),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_focusedPlace == null) _centerPin(),
+          if (_focusedPlace == null)
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.paddingOf(context).bottom + 110,
+              child: Column(
+                children: [
+                  _button(Icons.navigation_outlined, () {
+                    if (_native) {
+                      _nativeController?.north();
+                    } else {
+                      _fallback.rotate(0);
+                    }
+                  }, '朝北'),
+                  const SizedBox(height: 8),
+                  _button(
+                    _locating ? Icons.location_searching : Icons.my_location,
+                    () => _locate(interactive: true),
+                    _locating ? '定位中' : '定位',
                   ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.add,
-                    size: 30,
-                    color: AppColors.warmWhite,
+                ],
+              ),
+            ),
+          if (_tip && _focusedPlace == null)
+            Positioned(
+              left: 20,
+              right: 76,
+              bottom: MediaQuery.paddingOf(context).bottom + 110,
+              child: _surface(
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(left: 14),
+                        child: Text('长按地图收藏地点'),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭引导',
+                      onPressed: () => setState(() => _tip = false),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_focusedPlace == null)
+            Positioned(
+              left: 20,
+              bottom: MediaQuery.paddingOf(context).bottom + 20,
+              child: _surface(
+                child: TextButton.icon(
+                  onPressed: _collections,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
+                  icon: const Icon(Icons.bookmark_outline, size: 20),
+                  label: const Text('我的收藏'),
+                ),
+              ),
+            ),
+          if (_focusedPlace == null)
+            Positioned(
+              right: 20,
+              bottom: MediaQuery.paddingOf(context).bottom + 20,
+              child: Tooltip(
+                message: '添加地点',
+                child: FilledButton(
+                  onPressed: () => _collection(),
+                  onLongPress: () => _collection(manual: true),
+                  style: FilledButton.styleFrom(
+                    shape: const CircleBorder(),
+                    padding: const EdgeInsets.all(14),
+                    minimumSize: const Size(52, 52),
+                  ),
+                  child: const Icon(Icons.add),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _centerPin() => Center(
+    child: RepaintBoundary(
+      child: Transform.translate(
+        offset: const Offset(0, -21),
+        child: Semantics(
+          label: '收藏地图中心位置',
+          button: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _collection,
+            child: AnimatedScale(
+              scale: _collecting ? .94 : 1,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              child: const SizedBox(
+                width: 48,
+                height: 48,
+                child: Icon(
+                  Icons.location_on_rounded,
+                  size: 42,
+                  color: AppColors.accent,
+                  shadows: [
+                    Shadow(color: Colors.white, blurRadius: 3),
+                    Shadow(
+                      color: Colors.black26,
+                      blurRadius: 5,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _nearbyBadge(int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: const BoxDecoration(
-        color: AppColors.ink,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-      ),
-      child: Text(
-        '视野内 · $count 个收藏',
-        style: AppText.caption.copyWith(color: AppColors.warmWhite),
-      ),
-    );
-  }
-
-  Widget _cityPill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.warmWhite.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.ink.withValues(alpha: 0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.ink.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_cityName ?? '当前位置', style: AppText.cityName),
-              Text('我的品味地图', style: AppText.caption),
-            ],
-          ),
-          const Spacer(),
-          const Text('▾', style: TextStyle(color: AppColors.stone, fontSize: 11)),
-        ],
-      ),
-    );
-  }
-
-  Widget _iconBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppColors.warmWhite.withValues(alpha: 0.95),
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.ink.withValues(alpha: 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
-        alignment: Alignment.center,
-        child: Icon(icon, size: 19, color: AppColors.ink),
       ),
-    );
-  }
+    ),
+  );
 
-  Widget _avatarBtn(VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppColors.ink,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.warmWhite, width: 2.5),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink.withValues(alpha: 0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: const Icon(Icons.person, size: 17, color: AppColors.warmWhite),
-      ),
-    );
-  }
-}
-
-class _Cluster {
-  double lat;
-  double lng;
-  final List<CollectionView> views = [];
-
-  _Cluster(CollectionView v)
-      : lat = v.latitude,
-        lng = v.longitude {
-    views.add(v);
-  }
-
-  void add(CollectionView v) {
-    views.add(v);
-    lat = (lat * (views.length - 1) + v.latitude) / views.length;
-    lng = (lng * (views.length - 1) + v.longitude) / views.length;
-  }
-
-  double distanceTo(CollectionView v) {
-    final dLat = lat - v.latitude;
-    final dLng = (lng - v.longitude) * math.cos(lat * math.pi / 180);
-    return math.sqrt(dLat * dLat + dLng * dLng);
-  }
+  Widget _surface({required Widget child}) => Material(
+    color: Colors.white.withValues(alpha: .96),
+    elevation: 2,
+    shadowColor: Colors.black12,
+    borderRadius: BorderRadius.circular(24),
+    child: child,
+  );
+  Widget _button(IconData icon, VoidCallback onTap, String label) => _surface(
+    child: IconButton(
+      onPressed: onTap,
+      tooltip: label,
+      icon: Icon(icon, size: 20),
+      constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+    ),
+  );
 }

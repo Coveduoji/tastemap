@@ -35,42 +35,41 @@ class Collection {
     List<String>? images,
     String? visitedStatus,
     String? updatedAt,
-  }) =>
-      Collection(
-        id: id,
-        placeId: placeId,
-        primaryTag: primaryTag ?? this.primaryTag,
-        secondaryTags: secondaryTags ?? this.secondaryTags,
-        note: note ?? this.note,
-        images: images ?? this.images,
-        visitedStatus: visitedStatus ?? this.visitedStatus,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-      );
+  }) => Collection(
+    id: id,
+    placeId: placeId,
+    primaryTag: primaryTag ?? this.primaryTag,
+    secondaryTags: secondaryTags ?? this.secondaryTags,
+    note: note ?? this.note,
+    images: images ?? this.images,
+    visitedStatus: visitedStatus ?? this.visitedStatus,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
 
   Map<String, Object?> toMap() => {
-        'id': id,
-        'place_id': placeId,
-        'primary_tag': primaryTag.name,
-        'secondary_tags': jsonEncode(secondaryTags),
-        'note': note,
-        'images': jsonEncode(images),
-        'visited_status': visitedStatus,
-        'created_at': createdAt,
-        'updated_at': updatedAt,
-      };
+    'id': id,
+    'place_id': placeId,
+    'primary_tag': primaryTag.name,
+    'secondary_tags': jsonEncode(secondaryTags),
+    'note': note,
+    'images': jsonEncode(images),
+    'visited_status': visitedStatus,
+    'created_at': createdAt,
+    'updated_at': updatedAt,
+  };
 
   factory Collection.fromMap(Map<String, Object?> map) => Collection(
-        id: map['id'] as String,
-        placeId: map['place_id'] as String,
-        primaryTag: PrimaryTag.fromName(map['primary_tag'] as String?),
-        secondaryTags: _decodeList(map['secondary_tags']),
-        note: (map['note'] as String?) ?? '',
-        images: _decodeList(map['images']),
-        visitedStatus: (map['visited_status'] as String?) ?? 'pending',
-        createdAt: (map['created_at'] as String?) ?? '',
-        updatedAt: (map['updated_at'] as String?) ?? '',
-      );
+    id: map['id'] as String,
+    placeId: map['place_id'] as String,
+    primaryTag: PrimaryTag.fromName(map['primary_tag'] as String?),
+    secondaryTags: _decodeList(map['secondary_tags']),
+    note: (map['note'] as String?) ?? '',
+    images: _decodeList(map['images']),
+    visitedStatus: (map['visited_status'] as String?) ?? 'pending',
+    createdAt: (map['created_at'] as String?) ?? '',
+    updatedAt: (map['updated_at'] as String?) ?? '',
+  );
 
   static List<String> _decodeList(Object? raw) {
     if (raw == null || raw is! String || raw.isEmpty) return const [];

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/collection.dart';
 import '../models/collection_view.dart';
@@ -8,6 +10,7 @@ import 'database.dart';
 
 /// 收藏数据的持久化访问层。所有写操作都返回是否成功，供 UI 层做失败提示。
 class CollectionRepository {
+  static const _secure = FlutterSecureStorage();
   final AppDatabase _db = AppDatabase.instance;
 
   /// 查询全部收藏（JOIN 地点），按收藏时间倒序。
@@ -17,13 +20,28 @@ class CollectionRepository {
       SELECT
         c.id, c.place_id, c.primary_tag, c.secondary_tags, c.note, c.images,
         c.visited_status, c.created_at, c.updated_at,
-        p.name, p.latitude, p.longitude, p.city, p.country,
+        p.name, p.latitude, p.longitude, p.city, p.country, p.province, p.district, p.adcode, p.amap_id, p.address,
         p.type, p.source, p.foursquare_id
       FROM collections c
       JOIN places p ON p.id = c.place_id
       ORDER BY c.created_at DESC
     ''');
     return rows.map(CollectionView.fromRow).toList();
+  }
+
+  Future<bool> updatePlace(Place place) async {
+    try {
+      final db = await _db.database;
+      return await db.update(
+            'places',
+            place.toMap(),
+            where: 'id = ?',
+            whereArgs: [place.id],
+          ) ==
+          1;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// 按一级标签筛选。
@@ -49,10 +67,16 @@ class CollectionRepository {
     try {
       final db = await _db.database;
       await db.transaction((txn) async {
-        await txn.insert('places', place.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace);
-        await txn.insert('collections', collection.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace);
+        await txn.insert(
+          'places',
+          place.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await txn.insert(
+          'collections',
+          collection.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       });
       return true;
     } catch (_) {
@@ -81,11 +105,13 @@ class CollectionRepository {
     try {
       final db = await _db.database;
       final placeId = await _placeIdOf(db, collectionId);
-      await db.delete('collections',
-          where: 'id = ?', whereArgs: [collectionId]);
+      await db.delete(
+        'collections',
+        where: 'id = ?',
+        whereArgs: [collectionId],
+      );
       if (placeId != null) {
-        await db
-            .delete('places', where: 'id = ?', whereArgs: [placeId]);
+        await db.delete('places', where: 'id = ?', whereArgs: [placeId]);
       }
       return true;
     } catch (_) {
@@ -108,11 +134,13 @@ class CollectionRepository {
   }
 
   Future<String?> _placeIdOf(Database db, String collectionId) async {
-    final rows = await db.query('collections',
-        columns: ['place_id'],
-        where: 'id = ?',
-        whereArgs: [collectionId],
-        limit: 1);
+    final rows = await db.query(
+      'collections',
+      columns: ['place_id'],
+      where: 'id = ?',
+      whereArgs: [collectionId],
+      limit: 1,
+    );
     return rows.isEmpty ? null : rows.first['place_id'] as String?;
   }
 
@@ -124,7 +152,10 @@ class CollectionRepository {
   }
 
   /// 导入：用云端数据整体替换本地（云同步恢复）。
-  Future<bool> importAll(List<Place> places, List<Collection> collections) async {
+  Future<bool> importAll(
+    List<Place> places,
+    List<Collection> collections,
+  ) async {
     try {
       final db = await _db.database;
       await db.transaction((txn) async {
@@ -143,20 +174,105 @@ class CollectionRepository {
     }
   }
 
+  /// Update assignments and reusable options atomically; never remove places.
+  Future<bool> removeCustomType(PrimaryTag tag, List<String> remaining) async {
+    if (!tag.isCustom) return false;
+    try {
+      final db = await _db.database;
+      await db.transaction((tx) async {
+        await tx.update(
+          'collections',
+          {
+            'primary_tag': PrimaryTag.other.name,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          },
+          where: 'primary_tag = ?',
+          whereArgs: [tag.name],
+        );
+        await tx.insert('app_settings', {
+          'key': 'custom_types',
+          'value': jsonEncode(remaining),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> removeCustomLabel(String label, List<String> remaining) async {
+    try {
+      final db = await _db.database;
+      await db.transaction((tx) async {
+        final rows = await tx.query(
+          'collections',
+          columns: ['id', 'secondary_tags'],
+        );
+        for (final row in rows) {
+          List<String> labels;
+          try {
+            labels = (jsonDecode(row['secondary_tags'] as String) as List)
+                .cast<String>();
+          } catch (_) {
+            continue;
+          }
+          if (!labels.contains(label)) continue;
+          await tx.update(
+            'collections',
+            {
+              'secondary_tags': jsonEncode(
+                labels.where((v) => v != label).toList(),
+              ),
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+        await tx.insert('app_settings', {
+          'key': 'custom_labels',
+          'value': jsonEncode(remaining),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 读配置项（App_Settings 表）。
   Future<String?> getSetting(String key) async {
     final db = await _db.database;
-    final rows = await db.query('app_settings',
-        columns: ['value'], where: 'key = ?', whereArgs: [key], limit: 1);
-    return rows.isEmpty ? null : rows.first['value'] as String?;
+    final rows = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    final legacy = rows.isEmpty ? null : rows.first['value'] as String?;
+    if (key == 'webdav_password') {
+      if (legacy != null) {
+        await _secure.write(key: key, value: legacy);
+        await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+      }
+      return _secure.read(key: key);
+    }
+    return legacy;
   }
 
   /// 写配置项（App_Settings 表）。
   Future<bool> setSetting(String key, String value) async {
     try {
+      if (key == 'webdav_password') {
+        await _secure.write(key: key, value: value);
+        return true;
+      }
       final db = await _db.database;
-      await db.insert('app_settings', {'key': key, 'value': value},
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.insert('app_settings', {
+        'key': key,
+        'value': value,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       return true;
     } catch (_) {
       return false;

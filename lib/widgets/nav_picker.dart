@@ -14,10 +14,12 @@ class NavPickerSheet extends StatelessWidget {
   const NavPickerSheet({super.key, required this.view});
 
   String get _addr {
-    return [view.name, view.city, view.country]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .join(' · ');
+    return [
+      view.name,
+      view.place.address,
+      view.city,
+      view.country,
+    ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
   }
 
   Future<void> _launch(BuildContext context, String app, Uri uri) async {
@@ -59,9 +61,11 @@ class NavPickerSheet extends StatelessWidget {
               children: [
                 Text('前往', style: AppText.caption),
                 const SizedBox(height: 3),
-                Text(_addr,
-                    textAlign: TextAlign.center,
-                    style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
+                Text(
+                  _addr,
+                  textAlign: TextAlign.center,
+                  style: AppText.body.copyWith(fontWeight: FontWeight.w500),
+                ),
               ],
             ),
           ),
@@ -70,31 +74,33 @@ class NavPickerSheet extends StatelessWidget {
             icon: Icons.map,
             bg: AppColors.bg,
             title: '高德地图',
-            subtitle: '跳转到高德导航',
+            subtitle: '',
             onTap: () => _launch(
               context,
               '高德地图',
               Uri.parse(
-                  'https://uri.amap.com/navigation?to=$lng,$lat,$encodedName&mode=car'),
+                'https://uri.amap.com/navigation?to=$lng,$lat,$encodedName&mode=car',
+              ),
             ),
           ),
           _NavItem(
             icon: Icons.public,
             bg: AppColors.bg,
             title: 'Google Maps',
-            subtitle: '跳转到 Google 导航',
+            subtitle: '',
             onTap: () => _launch(
               context,
               'Google Maps',
               Uri.parse(
-                  'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng'),
+                'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+              ),
             ),
           ),
           _NavItem(
             icon: Icons.explore,
             bg: AppColors.bg,
             title: 'Apple 地图',
-            subtitle: '跳转到 Apple 导航',
+            subtitle: '',
             isLast: true,
             onTap: () => _launch(
               context,
@@ -115,7 +121,10 @@ class NavPickerSheet extends StatelessWidget {
                 color: AppColors.warmWhite,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Text('取消', style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
+              child: Text(
+                '取消',
+                style: AppText.body.copyWith(fontWeight: FontWeight.w500),
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -170,10 +179,12 @@ class _NavItem extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: AppText.caption),
+                  Text(
+                    title,
+                    style: AppText.body.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  if (subtitle.isNotEmpty)
+                    Text(subtitle, style: AppText.caption),
                 ],
               ),
             ),
@@ -210,11 +221,17 @@ class _CopyItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.content_copy, size: 18, color: AppColors.ink),
+              child: const Icon(
+                Icons.content_copy,
+                size: 18,
+                color: AppColors.ink,
+              ),
             ),
             const SizedBox(width: 13),
-            Text('拷贝地址',
-                style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
+            Text(
+              '拷贝地址',
+              style: AppText.body.copyWith(fontWeight: FontWeight.w500),
+            ),
           ],
         ),
       ),

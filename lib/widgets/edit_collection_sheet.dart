@@ -38,9 +38,9 @@ class _EditCollectionSheetState extends State<EditCollectionSheet> {
     if (ok) {
       Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存失败，请重试')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('保存失败，请重试')));
     }
   }
 
@@ -48,6 +48,9 @@ class _EditCollectionSheetState extends State<EditCollectionSheet> {
   Widget build(BuildContext context) {
     return SheetContainer(
       child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -57,22 +60,6 @@ class _EditCollectionSheetState extends State<EditCollectionSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('编辑收藏', style: AppText.sectionTitle),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Text('×',
-                              style:
-                                  TextStyle(fontSize: 20, color: AppColors.stone)),
-                        ),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 8),
                   Text(widget.view.name, style: AppText.placeName),
                   const SizedBox(height: 14),
@@ -81,6 +68,8 @@ class _EditCollectionSheetState extends State<EditCollectionSheet> {
                   CollectionFormFields(
                     key: _formKey,
                     initialTag: widget.view.tag,
+                    initialSecondaryTags: widget.view.secondaryTags,
+                    initialImages: widget.view.images,
                     initialVisited: widget.view.visited,
                     initialNote: widget.view.note,
                   ),
@@ -100,9 +89,13 @@ class _EditCollectionSheetState extends State<EditCollectionSheet> {
                     color: AppColors.accent,
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  child: Text('保存修改',
-                      style: AppText.chip
-                          .copyWith(color: AppColors.warmWhite, fontSize: 14)),
+                  child: Text(
+                    '保存修改',
+                    style: AppText.chip.copyWith(
+                      color: AppColors.warmWhite,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               ),
             ),

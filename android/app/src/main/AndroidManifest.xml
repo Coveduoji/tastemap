@@ -4,10 +4,15 @@
     <!-- 定位「定位我」按钮；被拒时降级默认坐标 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="品味地图"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <meta-data android:name="com.amap.api.v2.apikey" android:value="${AMAP_API_KEY}"/>
+        <service android:name="com.amap.api.location.APSService" android:exported="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

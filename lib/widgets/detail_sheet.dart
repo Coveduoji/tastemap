@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/collection_view.dart';
+import '../data/poi_search.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import '../theme/typography.dart';
@@ -20,10 +21,11 @@ class DetailSheet extends StatelessWidget {
   const DetailSheet({super.key, required this.view});
 
   String get _addressText {
-    final parts = [view.city, view.country]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .toList();
+    if (view.place.address?.isNotEmpty == true) return view.place.address!;
+    final parts = [
+      view.city,
+      view.country,
+    ].whereType<String>().where((s) => s.isNotEmpty).toList();
     return parts.isEmpty ? '未标注地址' : parts.join(' · ');
   }
 
@@ -54,9 +56,9 @@ class DetailSheet extends StatelessWidget {
     if (ok) {
       Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('删除失败，请重试')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('删除失败，请重试')));
     }
   }
 
@@ -64,6 +66,7 @@ class DetailSheet extends StatelessWidget {
     final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCollectionSheet(view: view),
     );
@@ -84,7 +87,10 @@ class DetailSheet extends StatelessWidget {
     await Clipboard.setData(ClipboardData(text: _addressText));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✓ 地址已复制'), duration: Duration(seconds: 2)),
+        const SnackBar(
+          content: Text('✓ 地址已复制'),
+          duration: Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -108,32 +114,48 @@ class DetailSheet extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(view.name, style: AppText.placeName),
+                          InkWell(
+                            onTap: () => Navigator.pushNamed(
+                              context,
+                              '/place',
+                              arguments: Poi.fromPlace(view.place),
+                            ),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    view.name,
+                                    style: AppText.placeName,
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 7),
                           Wrap(
                             spacing: 6,
                             runSpacing: 6,
                             children: [
-                              _dtag(view.tag.label, view.tag.bubbleColor,
-                                  view.tag.accentColor,
-                                  icon: view.tag.icon),
+                              _dtag(
+                                view.tag.label,
+                                view.tag.bubbleColor,
+                                view.tag.accentColor,
+                                icon: view.tag.icon,
+                              ),
                               ...view.secondaryTags.map(
-                                  (t) => _dtag(t, AppColors.bg, AppColors.stone)),
+                                (t) => _dtag(t, AppColors.bg, AppColors.stone),
+                              ),
                               if (view.visited)
-                                _dtag('已打卡', AppColors.visited, Colors.white,
-                                    icon: Icons.check),
+                                _dtag(
+                                  '已打卡',
+                                  AppColors.visited,
+                                  Colors.white,
+                                  icon: Icons.check,
+                                ),
                             ],
                           ),
                         ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Text('×',
-                            style:
-                                TextStyle(fontSize: 20, color: AppColors.stone)),
                       ),
                     ),
                   ],
@@ -153,14 +175,8 @@ class DetailSheet extends StatelessWidget {
                     _photoStrip(),
                     const SizedBox(height: 14),
                   ],
-                  Text('我的备注', style: AppText.label),
-                  const SizedBox(height: 6),
-                  Text(
-                    view.note.isEmpty ? '暂无备注' : view.note,
-                    style: AppText.body.copyWith(
-                      color: view.note.isEmpty ? AppColors.stone : AppColors.ink,
-                    ),
-                  ),
+                  if (view.note.isNotEmpty)
+                    Text(view.note, style: AppText.body),
                   const SizedBox(height: 16),
                   const Divider(height: 1, color: AppColors.divider),
                   const SizedBox(height: 8),
@@ -172,7 +188,7 @@ class DetailSheet extends StatelessWidget {
                   _InfoRow(
                     icon: Icons.location_on,
                     title: _addressText,
-                    subtitle: '点击复制地址',
+                    subtitle: '',
                     onTap: () => _copyAddress(context),
                   ),
                   const SizedBox(height: 8),
@@ -187,14 +203,32 @@ class DetailSheet extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _footBtn(Icons.edit, '编辑', AppColors.bg, AppColors.ink, 0.8,
-                    () => _edit(context)),
+                _footBtn(
+                  Icons.edit,
+                  '编辑',
+                  AppColors.bg,
+                  AppColors.ink,
+                  0.8,
+                  () => _edit(context),
+                ),
                 const SizedBox(width: 7),
-                _footBtn(Icons.navigation, '导航前往', AppColors.accent,
-                    AppColors.warmWhite, 1.4, () => _nav(context)),
+                _footBtn(
+                  Icons.navigation,
+                  '导航前往',
+                  AppColors.accent,
+                  AppColors.warmWhite,
+                  1.4,
+                  () => _nav(context),
+                ),
                 const SizedBox(width: 7),
-                _footBtn(Icons.delete_outline, '', AppColors.dangerBg,
-                    AppColors.danger, 0.7, () => _delete(context)),
+                _footBtn(
+                  Icons.delete_outline,
+                  '',
+                  AppColors.dangerBg,
+                  AppColors.danger,
+                  0.7,
+                  () => _delete(context),
+                ),
               ],
             ),
           ),
@@ -243,15 +277,20 @@ class DetailSheet extends StatelessWidget {
             Icon(icon, size: 13, color: fg),
             const SizedBox(width: 4),
           ],
-          Text(label,
-              style: AppText.chip.copyWith(color: fg, fontSize: 11)),
+          Text(label, style: AppText.chip.copyWith(color: fg, fontSize: 11)),
         ],
       ),
     );
   }
 
-  Widget _footBtn(IconData icon, String label, Color bg, Color fg, double flex,
-      VoidCallback onTap) {
+  Widget _footBtn(
+    IconData icon,
+    String label,
+    Color bg,
+    Color fg,
+    double flex,
+    VoidCallback onTap,
+  ) {
     return Expanded(
       flex: (flex * 10).round(),
       child: GestureDetector(
@@ -312,8 +351,10 @@ class _InfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
+                Text(
+                  title,
+                  style: AppText.body.copyWith(fontWeight: FontWeight.w500),
+                ),
                 const SizedBox(height: 2),
                 Text(subtitle, style: AppText.caption),
               ],
