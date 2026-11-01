@@ -40,7 +40,9 @@ android {
             // Opt-in side-by-side build for device QA; preserve the installed app.
             if (providers.environmentVariable("TASTEMAP_PREVIEW").orNull == "1") {
                 applicationIdSuffix = ".preview"
-                versionNameSuffix = "-preview"
+                if (!flutter.versionName.contains("-preview")) {
+                    versionNameSuffix = "-preview"
+                }
             }
         }
         release {

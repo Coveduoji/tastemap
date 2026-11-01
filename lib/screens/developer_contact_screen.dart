@@ -1,3 +1,4 @@
+import '../widgets/photo_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -144,8 +145,13 @@ class _DeveloperContactScreenState extends State<DeveloperContactScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 16),
-                  InteractiveViewer(
-                    maxScale: 3,
+                  InkWell(
+                    onTap: () => showPhotoViewer(
+                      context,
+                      images: const [
+                        AssetImage(DeveloperContactScreen.wechatAsset),
+                      ],
+                    ),
                     child: Image.asset(
                       DeveloperContactScreen.wechatAsset,
                       width: 220,

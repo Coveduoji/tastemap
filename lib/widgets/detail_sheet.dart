@@ -12,6 +12,7 @@ import '../theme/typography.dart';
 import '../utils/format.dart';
 import 'edit_collection_sheet.dart';
 import 'nav_picker.dart';
+import 'photo_viewer.dart';
 import 'sheet_chrome.dart';
 
 /// Pin 详情 Sheet：名称 / 标签 / 我的备注 / 收藏时间 / 地址 + 底部编辑·导航·删除。
@@ -164,7 +165,7 @@ class DetailSheet extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         if (view.images.isNotEmpty) ...[
-          _photoStrip(),
+          _photoStrip(context),
           const SizedBox(height: 14),
         ],
         if (view.note.isNotEmpty) ...[
@@ -218,25 +219,32 @@ class DetailSheet extends StatelessWidget {
     ),
   );
 
-  Widget _photoStrip() {
+  Widget _photoStrip(BuildContext context) {
     return SizedBox(
       height: 82,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: view.images.length,
         separatorBuilder: (_, _) => const SizedBox(width: 7),
-        itemBuilder: (_, i) => ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: Image.file(
-            File(view.images[i]),
-            width: 120,
-            height: 82,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => Container(
+        itemBuilder: (_, i) => InkWell(
+          onTap: () => showPhotoViewer(
+            context,
+            images: view.images.map((path) => FileImage(File(path))).toList(),
+            initialIndex: i,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: Image.file(
+              File(view.images[i]),
               width: 120,
               height: 82,
-              color: AppColors.bg,
-              child: const Icon(Icons.broken_image, color: AppColors.stone),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                width: 120,
+                height: 82,
+                color: AppColors.bg,
+                child: const Icon(Icons.broken_image, color: AppColors.stone),
+              ),
             ),
           ),
         ),

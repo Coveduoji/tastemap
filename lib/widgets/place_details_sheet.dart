@@ -12,6 +12,7 @@ import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import 'edit_collection_sheet.dart';
 import 'nav_picker.dart';
+import 'photo_viewer.dart';
 
 /// Content for Flutter's persistent draggable sheet; MapScreen owns the map below.
 class PlaceDetailsSheet extends StatefulWidget {
@@ -209,19 +210,28 @@ class _PlaceDetailsSheetState extends State<PlaceDetailsSheet> {
                       scrollDirection: Axis.horizontal,
                       itemCount: _place.photos.length,
                       separatorBuilder: (_, _) => const SizedBox(width: 10),
-                      itemBuilder: (_, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: CachedNetworkImage(
-                          imageUrl: _place.photos[i],
-                          width: 220,
-                          height: 160,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, _, _) => Container(
-                            color: AppColors.bg,
+                      itemBuilder: (_, i) => InkWell(
+                        onTap: () => showPhotoViewer(
+                          context,
+                          images: _place.photos
+                              .map(CachedNetworkImageProvider.new)
+                              .toList(),
+                          initialIndex: i,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: CachedNetworkImage(
+                            imageUrl: _place.photos[i],
                             width: 220,
-                            child: const Icon(
-                              Icons.image_outlined,
-                              color: AppColors.stone,
+                            height: 160,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, _, _) => Container(
+                              color: AppColors.bg,
+                              width: 220,
+                              child: const Icon(
+                                Icons.image_outlined,
+                                color: AppColors.stone,
+                              ),
                             ),
                           ),
                         ),
@@ -268,18 +278,29 @@ class _PlaceDetailsSheetState extends State<PlaceDetailsSheet> {
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     children: saved!.images
+                        .asMap()
+                        .entries
                         .map(
-                          (path) => Padding(
+                          (entry) => Padding(
                             padding: const EdgeInsets.only(right: 10),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Image.file(
-                                File(path),
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    const Icon(Icons.image_outlined),
+                            child: InkWell(
+                              onTap: () => showPhotoViewer(
+                                context,
+                                images: saved.images
+                                    .map((path) => FileImage(File(path)))
+                                    .toList(),
+                                initialIndex: entry.key,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.file(
+                                  File(entry.value),
+                                  width: 120,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) =>
+                                      const Icon(Icons.image_outlined),
+                                ),
                               ),
                             ),
                           ),

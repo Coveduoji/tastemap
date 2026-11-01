@@ -9,6 +9,7 @@ import '../models/secondary_tag.dart';
 import '../theme/colors.dart';
 import '../theme/typography.dart';
 import '../utils/image_store.dart';
+import 'photo_viewer.dart';
 
 /// 收藏填写表单（一级标签 / 二级标签 / 打卡状态 / 备注），新建与编辑复用。
 /// 通过 [CollectionFormFieldsState] 读取当前值（tag / secondaryTags / visited / note）。
@@ -302,20 +303,27 @@ class CollectionFormFieldsState extends State<CollectionFormFields> {
         ..._images.asMap().entries.map(
           (e) => Stack(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.file(
-                  File(e.value),
-                  width: 72,
-                  height: 72,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
+              InkWell(
+                onTap: () => showPhotoViewer(
+                  context,
+                  images: _images.map((path) => FileImage(File(path))).toList(),
+                  initialIndex: e.key,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(
+                    File(e.value),
                     width: 72,
                     height: 72,
-                    color: AppColors.bg,
-                    child: const Icon(
-                      Icons.broken_image,
-                      color: AppColors.stone,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Container(
+                      width: 72,
+                      height: 72,
+                      color: AppColors.bg,
+                      child: const Icon(
+                        Icons.broken_image,
+                        color: AppColors.stone,
+                      ),
                     ),
                   ),
                 ),
