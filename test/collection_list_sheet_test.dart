@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:tastemap/data/collection_repository.dart';
@@ -13,6 +14,15 @@ import 'package:tastemap/widgets/detail_sheet.dart';
 class ListRepository extends CollectionRepository {
   final int count;
   ListRepository(this.count);
+  final deleted = <String>[];
+  bool deleteSucceeds = true;
+  @override
+  Future<bool> delete(String collectionId) async {
+    if (!deleteSucceeds) return false;
+    deleted.add(collectionId);
+    return true;
+  }
+
   @override
   Future<List<CollectionView>> getCollectionViews() async => List.generate(
     count,
@@ -35,12 +45,126 @@ class ListRepository extends CollectionRepository {
         updatedAt: '',
       ),
     ),
-  );
+  ).where((view) => !deleted.contains(view.id)).toList();
   @override
   Future<String?> getSetting(String key) async => null;
 }
 
+Future<CollectionProvider> openSwipeList(
+  WidgetTester tester,
+  ListRepository repo,
+) async {
+  tester.view.physicalSize = const Size(420, 900);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final provider = CollectionProvider(repository: repo);
+  await provider.load();
+  await tester.pumpWidget(
+    ChangeNotifierProvider.value(
+      value: provider,
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showCollectionList(context),
+              child: const Text('打开'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('打开'));
+  await tester.pumpAndSettle();
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox());
+    provider.dispose();
+  });
+  return provider;
+}
+
+Future<void> revealDelete(WidgetTester tester, String name) async {
+  final row = find.ancestor(
+    of: find.text(name),
+    matching: find.byType(Slidable),
+  );
+  await tester.drag(row, const Offset(-260, 0));
+  await tester.pumpAndSettle();
+}
+
+Future<void> confirmDelete(WidgetTester tester) async {
+  await tester.tap(find.text('删除').hitTestable());
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(of: find.byType(AlertDialog), matching: find.text('删除')),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('左滑露出右侧删除按钮，取消不删除，确认后仅删除该条并保留列表', (tester) async {
+    final repo = ListRepository(2);
+    await openSwipeList(tester, repo);
+    expect(find.text('删除').hitTestable(), findsNothing);
+    await revealDelete(tester, '地点0');
+    expect(find.text('删除').hitTestable(), findsOneWidget);
+    expect(repo.deleted, isEmpty);
+    await revealDelete(tester, '地点1');
+    expect(find.text('删除').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('删除').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('确认删除「地点1」？此操作不可恢复。'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(repo.deleted, isEmpty);
+    await revealDelete(tester, '地点0');
+    await confirmDelete(tester);
+    expect(repo.deleted, ['0']);
+    expect(find.text('地点0'), findsNothing);
+    expect(find.text('地点1'), findsOneWidget);
+    expect(find.text('1 个'), findsOneWidget);
+    expect(find.text('我的收藏'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('搜索结果可左滑删除，保留搜索词并更新空态', (tester) async {
+    final repo = ListRepository(3);
+    await openSwipeList(tester, repo);
+    await tester.enterText(find.byType(TextField), '地点1');
+    await tester.pumpAndSettle();
+    await revealDelete(tester, '地点1');
+    await confirmDelete(tester);
+    expect(repo.deleted, ['1']);
+    expect(find.text('没有匹配的收藏'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '地点1',
+    );
+    await tester.tap(find.byTooltip('清空搜索'));
+    await tester.pumpAndSettle();
+    expect(find.text('地点0'), findsOneWidget);
+    expect(find.text('地点1'), findsNothing);
+    expect(find.text('地点2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('删除失败保留原记录并允许重试', (tester) async {
+    final repo = ListRepository(1)..deleteSucceeds = false;
+    await openSwipeList(tester, repo);
+    await revealDelete(tester, '地点0');
+    await confirmDelete(tester);
+    expect(find.text('删除失败，请重试'), findsOneWidget);
+    expect(find.text('地点0'), findsOneWidget);
+    expect(repo.deleted, isEmpty);
+    repo.deleteSucceeds = true;
+    await revealDelete(tester, '地点0');
+    await confirmDelete(tester);
+    expect(repo.deleted, ['0']);
+    expect(find.text('还没有收藏'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('收藏面板保留城市折叠，点击返回地点而不打开详情', (tester) async {
     final provider = CollectionProvider(repository: ListRepository(2));
     await provider.load();
