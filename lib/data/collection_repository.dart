@@ -7,6 +7,7 @@ import '../models/collection_view.dart';
 import '../models/place.dart';
 import '../models/primary_tag.dart';
 import 'database.dart';
+import 'import_service.dart';
 
 /// 收藏数据的持久化访问层。所有写操作都返回是否成功，供 UI 层做失败提示。
 class CollectionRepository {
@@ -16,6 +17,10 @@ class CollectionRepository {
   /// 查询全部收藏（JOIN 地点），按收藏时间倒序。
   Future<List<CollectionView>> getCollectionViews() async {
     final db = await _db.database;
+    return _collectionViews(db);
+  }
+
+  Future<List<CollectionView>> _collectionViews(DatabaseExecutor db) async {
     final rows = await db.rawQuery('''
       SELECT
         c.id, c.place_id, c.primary_tag, c.secondary_tags, c.note, c.images,
@@ -88,32 +93,37 @@ class CollectionRepository {
   Future<bool> update(Collection collection) async {
     try {
       final db = await _db.database;
-      await db.update(
+      final changed = await db.update(
         'collections',
         collection.toMap(),
         where: 'id = ?',
         whereArgs: [collection.id],
       );
-      return true;
+      return changed == 1;
     } catch (_) {
       return false;
     }
   }
 
-  /// 删除单条收藏；地点通过外键级联清理。
+  /// Delete one memory; shared places remain until their last collection is removed.
   Future<bool> delete(String collectionId) async {
     try {
       final db = await _db.database;
-      final placeId = await _placeIdOf(db, collectionId);
-      await db.delete(
-        'collections',
-        where: 'id = ?',
-        whereArgs: [collectionId],
-      );
-      if (placeId != null) {
-        await db.delete('places', where: 'id = ?', whereArgs: [placeId]);
-      }
-      return true;
+      return await db.transaction((tx) async {
+        final placeId = await _placeIdOf(tx, collectionId);
+        if (placeId == null) return false;
+        await tx.delete(
+          'collections',
+          where: 'id = ?',
+          whereArgs: [collectionId],
+        );
+        await tx.rawDelete(
+          'DELETE FROM places WHERE id = ? AND NOT EXISTS '
+          '(SELECT 1 FROM collections WHERE place_id = ?)',
+          [placeId, placeId],
+        );
+        return true;
+      });
     } catch (_) {
       return false;
     }
@@ -133,7 +143,7 @@ class CollectionRepository {
     }
   }
 
-  Future<String?> _placeIdOf(Database db, String collectionId) async {
+  Future<String?> _placeIdOf(DatabaseExecutor db, String collectionId) async {
     final rows = await db.query(
       'collections',
       columns: ['place_id'],
@@ -172,6 +182,26 @@ class CollectionRepository {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<({int added, int skipped})> mergeImport(
+    List<CollectionView> incoming,
+  ) async {
+    final db = await _db.database;
+    return db.transaction((tx) async {
+      final plan = ImportService.planMerge(
+        incoming,
+        await _collectionViews(tx),
+      );
+      final insertedPlaces = <String>{};
+      for (final view in plan.additions) {
+        if (insertedPlaces.add(view.placeId)) {
+          await tx.insert('places', view.place.toMap());
+        }
+        await tx.insert('collections', view.collection.toMap());
+      }
+      return (added: plan.additions.length, skipped: plan.skipped);
+    });
   }
 
   /// Update assignments and reusable options atomically; never remove places.

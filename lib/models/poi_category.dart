@@ -16,6 +16,16 @@ enum PoiCategory {
   transport('交通', Icons.directions_transit_outlined, Color(0xFF6D94BD)),
   finance('金融', Icons.account_balance_outlined, Color(0xFF85989C)),
   service('生活服务', Icons.storefront_outlined, Color(0xFF9398A1)),
+  leisure('体育休闲', Icons.sports_tennis_outlined, Color(0xFF7C8EAC)),
+  car('汽车', Icons.directions_car_outlined, Color(0xFF8192A5)),
+  motorcycle('摩托车', Icons.two_wheeler_outlined, Color(0xFF8192A5)),
+  government('政府机构', Icons.account_balance_outlined, Color(0xFF85989C)),
+  facility('公共设施', Icons.wc_outlined, Color(0xFF9398A1)),
+  road('道路设施', Icons.signpost_outlined, Color(0xFF9398A1)),
+  address('地名地址', Icons.location_on_outlined, Color(0xFF9398A1)),
+  event('活动', Icons.event_outlined, Color(0xFF9676AB)),
+  indoor('室内设施', Icons.meeting_room_outlined, Color(0xFF9398A1)),
+  passage('通行设施', Icons.door_front_door_outlined, Color(0xFF9398A1)),
   other('地点', Icons.place_outlined, Color(0xFF9398A1));
 
   const PoiCategory(this.label, this.icon, this.color);
@@ -26,8 +36,18 @@ enum PoiCategory {
   static PoiCategory fromAmap(String code, String description) {
     // typecode is authoritative; textual fallback is only for missing/unknown codes.
     if (code.startsWith('0505')) return coffee;
-    if (code.startsWith('0504')) return bar;
+    if (code.startsWith('080304')) return bar;
     if (code.startsWith('05')) return food;
+    if (code.startsWith('08')) return leisure;
+    if (['01', '02', '03'].any(code.startsWith)) return car;
+    if (code.startsWith('04')) return motorcycle;
+    if (code.startsWith('13')) return government;
+    if (code.startsWith('18')) return road;
+    if (code.startsWith('19')) return address;
+    if (code.startsWith('20')) return facility;
+    if (code.startsWith('22')) return event;
+    if (code.startsWith('97')) return indoor;
+    if (code.startsWith('99')) return passage;
     if (code.startsWith('10')) return hotel;
     if (code.startsWith('11')) return sight;
     if (code.startsWith('1203')) return residence;

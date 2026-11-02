@@ -122,39 +122,6 @@ class ProfileScreen extends StatelessWidget {
               Expanded(child: _stat('$countryCount', '到访国家')),
             ],
           ),
-          const SizedBox(height: 24),
-          Material(
-            color: AppColors.accentSoft,
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => Navigator.pop(context),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.map_outlined,
-                      color: AppColors.accent,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '查看地图',
-                        style: AppText.chip.copyWith(color: AppColors.accent),
-                      ),
-                    ),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: AppColors.accent,
-                      size: 18,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -181,7 +148,6 @@ class ProfileScreen extends StatelessWidget {
     return _sectionCard(
       title: '我的收藏',
       count: all.length,
-      onMore: () => _chooseCollection(context),
       child: all.isEmpty
           ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
@@ -199,7 +165,7 @@ class ProfileScreen extends StatelessWidget {
               childAspectRatio: 1,
               children: [
                 ...recent.map((v) => _collectionTile(context, v)),
-                if (remaining > 0) _moreTile(remaining),
+                if (remaining > 0) _moreTile(context, remaining),
               ],
             ),
     );
@@ -259,22 +225,29 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _moreTile(int remaining) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bg,
+  Widget _moreTile(BuildContext context, int remaining) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder, width: 1.5),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '+$remaining',
-            style: AppText.sectionTitle.copyWith(color: AppColors.stone),
+        onTap: () => _chooseCollection(context),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.bg,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.cardBorder, width: 1.5),
           ),
-          Text('更多', style: AppText.caption.copyWith(fontSize: 12)),
-        ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '+$remaining',
+                style: AppText.sectionTitle.copyWith(color: AppColors.stone),
+              ),
+              Text('更多', style: AppText.caption.copyWith(fontSize: 12)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -370,7 +343,6 @@ class ProfileScreen extends StatelessWidget {
     required String title,
     required Widget child,
     int? count,
-    VoidCallback? onMore,
   }) {
     return Container(
       width: double.infinity,
@@ -398,17 +370,6 @@ class ProfileScreen extends StatelessWidget {
             children: [
               Text(title, style: AppText.sectionTitle),
               if (count != null) ...[Text('· $count', style: AppText.caption)],
-              if (onMore != null)
-                GestureDetector(
-                  onTap: onMore,
-                  child: Text(
-                    '查看全部 ›',
-                    style: AppText.chip.copyWith(
-                      color: AppColors.accent,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 11),

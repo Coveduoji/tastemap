@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
     <application
         android:label="拾途"
         android:name="${applicationName}"
@@ -72,6 +73,22 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <package android:name="com.autonavi.minimap"/>
+        <package android:name="com.baidu.BaiduMap"/>
+        <package android:name="com.tencent.map"/>
+        <package android:name="com.huawei.maps.app"/>
+        <package android:name="com.google.android.apps.maps"/>
+        <package android:name="com.google.android.apps.mapslite"/>
+        <package android:name="com.waze"/>
+        <package android:name="com.here.app.maps"/>
+        <package android:name="com.mapswithme.maps.pro"/>
+        <package android:name="net.osmand"/>
+        <package android:name="net.osmand.plus"/>
+        <package android:name="com.generalmagic.magicearth"/>
+        <package android:name="ru.yandex.yandexmaps"/>
+        <package android:name="ru.dublgis.dgismobile"/>
+        <package android:name="cz.seznam.mapy"/>
+
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

@@ -62,7 +62,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DetailSheet), findsOneWidget);
     expect(find.text('编辑'), findsOneWidget);
-    expect(find.text('导航前往'), findsOneWidget);
+    expect(find.text('导航'), findsOneWidget);
     expect(
       tester
           .widgetList<ModalBarrier>(find.byType(ModalBarrier))

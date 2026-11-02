@@ -74,6 +74,8 @@ class _ExportScreenState extends State<ExportScreen> {
             onSelectionChanged: (values) =>
                 setState(() => _csv = values.single),
           ),
+          const SizedBox(height: 12),
+          const Text('导出地点与收藏记录，不含照片原图。'),
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: _busy ? null : () => _export(false),

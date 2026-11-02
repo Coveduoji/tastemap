@@ -662,7 +662,11 @@ class _MapScreenState extends State<MapScreen> {
                       snap: true,
                       snapSizes: const [.48],
                       builder: (context, scroll) => DetailSheet(
-                        view: _savedPlace!,
+                        view:
+                            provider.all
+                                .where((v) => v.id == _savedPlace!.id)
+                                .firstOrNull ??
+                            _savedPlace!,
                         scrollController: scroll,
                         onClose: _closeSavedPlace,
                         onDetails: () =>

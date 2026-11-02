@@ -11,12 +11,13 @@ import '../theme/colors.dart';
 import '../theme/typography.dart';
 import '../utils/format.dart';
 import 'edit_collection_sheet.dart';
-import 'nav_picker.dart';
+import 'navigate_to_place.dart';
 import 'photo_viewer.dart';
 import 'sheet_chrome.dart';
+import 'share_card_sheet.dart';
 
 /// Pin 详情 Sheet：名称 / 标签 / 我的备注 / 收藏时间 / 地址 + 底部编辑·导航·删除。
-class DetailSheet extends StatelessWidget {
+class DetailSheet extends StatefulWidget {
   final CollectionView view;
   final ScrollController? scrollController;
   final VoidCallback? onClose;
@@ -29,6 +30,76 @@ class DetailSheet extends StatelessWidget {
     this.onClose,
     this.onDetails,
   });
+
+  @override
+  State<DetailSheet> createState() => _DetailSheetState();
+}
+
+class _DetailSheetState extends State<DetailSheet> {
+  CollectionView get view => widget.view;
+  ScrollController? get scrollController => widget.scrollController;
+  VoidCallback? get onClose => widget.onClose;
+  VoidCallback? get onDetails => widget.onDetails;
+  String? _savedDate;
+
+  @override
+  void didUpdateWidget(covariant DetailSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.view.id != view.id ||
+        oldWidget.view.createdAt != view.createdAt) {
+      _savedDate = null;
+    }
+  }
+
+  Future<void> _editDate() async {
+    final provider = context.read<CollectionProvider>();
+    final current = provider.all.where((v) => v.id == view.id).firstOrNull;
+    if (current == null) return;
+    final now = DateUtils.dateOnly(DateTime.now());
+    final original = DateTime.tryParse(current.createdAt)?.toLocal() ?? now;
+    final first = DateTime(original.year < 1900 ? original.year : 1900);
+    final last = original.isAfter(now) ? DateUtils.dateOnly(original) : now;
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: original,
+      firstDate: first,
+      lastDate: last,
+      helpText: '收藏时间',
+      cancelText: '取消',
+      confirmText: '保存',
+    );
+    if (selected == null ||
+        !mounted ||
+        DateUtils.isSameDay(selected, original)) {
+      return;
+    }
+    final latest = provider.all.where((v) => v.id == view.id).firstOrNull;
+    if (latest == null) return;
+    final date = DateTime(
+      selected.year,
+      selected.month,
+      selected.day,
+      original.hour,
+      original.minute,
+      original.second,
+      original.millisecond,
+      original.microsecond,
+    ).toIso8601String();
+    final ok = await provider.update(
+      latest.collection.copyWith(
+        createdAt: date,
+        updatedAt: DateTime.now().toUtc().toIso8601String(),
+      ),
+    );
+    if (!mounted) return;
+    if (ok) {
+      setState(() => _savedDate = date);
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('保存失败，请重试')));
+    }
+  }
 
   void _close(BuildContext context) {
     if (onClose != null) {
@@ -93,13 +164,7 @@ class DetailSheet extends StatelessWidget {
     }
   }
 
-  Future<void> _nav(BuildContext context) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => NavPickerSheet(view: view),
-    );
-  }
+  Future<void> _nav(BuildContext context) => navigateToPlace(context, view);
 
   Future<void> _copyAddress(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: _addressText));
@@ -176,7 +241,8 @@ class DetailSheet extends StatelessWidget {
         _InfoRow(
           icon: Icons.event,
           title: '收藏时间',
-          subtitle: formatChineseDate(view.createdAt),
+          subtitle: formatChineseDate(_savedDate ?? view.createdAt),
+          onTap: _editDate,
         ),
         _InfoRow(
           icon: Icons.location_on,
@@ -192,25 +258,30 @@ class DetailSheet extends StatelessWidget {
               '编辑',
               AppColors.bg,
               AppColors.ink,
-              .8,
               () => _edit(context),
             ),
             const SizedBox(width: 7),
             _footBtn(
               Icons.navigation,
-              '导航前往',
+              '导航',
               AppColors.accent,
               AppColors.warmWhite,
-              1.4,
               () => _nav(context),
             ),
             const SizedBox(width: 7),
             _footBtn(
+              Icons.ios_share,
+              '分享',
+              AppColors.bg,
+              AppColors.ink,
+              () => showShareCard(context, view),
+            ),
+            const SizedBox(width: 7),
+            _footBtn(
               Icons.delete_outline,
-              '',
+              '删除',
               AppColors.dangerBg,
               AppColors.danger,
-              .7,
               () => _delete(context),
             ),
           ],
@@ -277,39 +348,32 @@ class DetailSheet extends StatelessWidget {
     String label,
     Color bg,
     Color fg,
-    double flex,
     VoidCallback onTap,
-  ) {
-    return Expanded(
-      flex: (flex * 10).round(),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 15, color: fg),
-              if (label.isNotEmpty) ...[
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: AppText.chip.copyWith(color: fg),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        ),
+  ) => Expanded(
+    child: FilledButton(
+      onPressed: onTap,
+      style: FilledButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        minimumSize: const Size(0, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-    );
-  }
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: AppText.chip.copyWith(color: fg),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _InfoRow extends StatelessWidget {
@@ -344,8 +408,10 @@ class _InfoRow extends StatelessWidget {
                   title,
                   style: AppText.body.copyWith(fontWeight: FontWeight.w500),
                 ),
-                const SizedBox(height: 2),
-                Text(subtitle, style: AppText.caption),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppText.caption),
+                ],
               ],
             ),
           ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/poi_search.dart';
 import '../models/collection.dart';
 import '../models/place.dart';
+import '../models/nearby_category.dart';
 import '../models/primary_tag.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
@@ -12,7 +13,17 @@ import '../utils/uuid.dart';
 import 'collection_form_fields.dart';
 import 'sheet_chrome.dart';
 
+typedef NearbyPoiSearch =
+    Future<List<Poi>> Function(
+      double latitude,
+      double longitude, {
+      int limit,
+      String? types,
+      int radius,
+    });
+
 class PoiSheet extends StatefulWidget {
+  final NearbyPoiSearch nearbySearch;
   final LatLng center;
   final ScrollController scrollController;
   final VoidCallback? onSaved;
@@ -27,6 +38,7 @@ class PoiSheet extends StatefulWidget {
     this.onDetails,
     this.startManual = false,
     this.initialPoi,
+    this.nearbySearch = PoiSearchService.searchNearby,
   });
   @override
   State<PoiSheet> createState() => PoiSheetState();
@@ -40,6 +52,8 @@ class PoiSheetState extends State<PoiSheet> {
   bool _form = false, _loading = true, _saving = false;
   Object? _error;
   List<Poi> _nearby = [];
+  String? _nearbyTypes;
+  int _nearbyRequest = 0;
   Future<void>? _geography;
   @override
   void initState() {
@@ -84,21 +98,62 @@ class PoiSheetState extends State<PoiSheet> {
   }
 
   Future<void> _loadNearby() async {
+    final request = ++_nearbyRequest;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final values = await PoiSearchService.searchNearby(
+      final values = await widget.nearbySearch(
         widget.center.latitude,
         widget.center.longitude,
+        types: _nearbyTypes,
+        radius: 3000,
+        limit: 25,
       );
-      if (mounted) setState(() => _nearby = values);
+      if (mounted && request == _nearbyRequest) {
+        setState(() => _nearby = values);
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (mounted && request == _nearbyRequest) setState(() => _error = e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && request == _nearbyRequest) {
+        setState(() => _loading = false);
+      }
     }
+  }
+
+  void _setCategory(String? code) {
+    if (_nearbyTypes == code) return;
+    setState(() => _nearbyTypes = code);
+    _loadNearby();
+  }
+
+  Future<void> _chooseCategory() async {
+    final result = await showModalBottomSheet<({String? code})>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final category in nearbyCategories)
+                ChoiceChip(
+                  label: Text(category.label),
+                  selected: category.code == _nearbyTypes,
+                  onSelected: (_) =>
+                      Navigator.pop(context, (code: category.code)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted && result != null) _setCategory(result.code);
   }
 
   void _select(Poi poi) {
@@ -173,6 +228,34 @@ class PoiSheetState extends State<PoiSheet> {
     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
     children: [
       Text('附近', style: AppText.sectionTitle),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final category in nearbyCategories)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(category.label),
+                        selected: _nearbyTypes == category.code,
+                        onSelected: (_) => _setCategory(category.code),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: '全部分类',
+            icon: const Icon(Icons.tune_rounded),
+            onPressed: _chooseCategory,
+          ),
+        ],
+      ),
       const SizedBox(height: 12),
       if (_loading)
         const SizedBox(

@@ -28,6 +28,8 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  flutter_localizations:
+    sdk: flutter
   flutter:
     sdk: flutter
 
@@ -62,6 +64,9 @@ dependencies:
   flutter_dynamic_icon_plus: ^1.6.0
   flutter_slidable: ^4.0.3
   photo_view: ^0.15.0
+  screenshot: ^3.0.0
+  gal: ^2.3.3
+  map_launcher: ^7.0.0
 
 dependency_overrides:
   amap_map:
@@ -78,6 +83,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  sqflite_common_ffi: ^2.4.0+3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

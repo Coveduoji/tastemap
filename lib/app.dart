@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 
 import 'screens/map_screen.dart';
@@ -13,6 +14,9 @@ class TasteMapApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '拾途',
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

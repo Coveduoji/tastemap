@@ -165,6 +165,14 @@ class CollectionProvider extends ChangeNotifier {
     return ok;
   }
 
+  Future<({int added, int skipped})> mergeImport(
+    List<CollectionView> incoming,
+  ) async {
+    final result = await _repo.mergeImport(incoming);
+    await load();
+    return result;
+  }
+
   /// 云同步恢复：用云端数据整体替换本地。
   Future<bool> importAll(
     List<Place> places,

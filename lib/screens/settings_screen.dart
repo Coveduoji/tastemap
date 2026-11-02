@@ -6,6 +6,7 @@ import '../data/nearby_notifications.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import 'export_screen.dart';
+import 'import_screen.dart';
 import 'app_icon_screen.dart';
 import 'developer_contact_screen.dart';
 import 'webdav_screen.dart';
@@ -111,6 +112,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const WebDavScreen()),
+              ),
+            ),
+            _item(
+              Icons.file_download_outlined,
+              '导入数据',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ImportScreen()),
               ),
             ),
             _item(

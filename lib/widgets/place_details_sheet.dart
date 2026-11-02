@@ -11,8 +11,9 @@ import '../models/place.dart';
 import '../state/collection_provider.dart';
 import '../theme/colors.dart';
 import 'edit_collection_sheet.dart';
-import 'nav_picker.dart';
+import 'navigate_to_place.dart';
 import 'photo_viewer.dart';
+import 'share_card_sheet.dart';
 
 /// Content for Flutter's persistent draggable sheet; MapScreen owns the map below.
 class PlaceDetailsSheet extends StatefulWidget {
@@ -102,11 +103,8 @@ class _PlaceDetailsSheetState extends State<PlaceDetailsSheet> {
       updatedAt: '',
     ),
   );
-  Future<void> _navigate(Poi poi) => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (_) => NavPickerSheet(view: _navigationView(poi)),
-  );
+  Future<void> _navigate(Poi poi) =>
+      navigateToPlace(context, _navigationView(poi));
   Future<void> _external(Uri uri) async {
     try {
       if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
@@ -263,6 +261,15 @@ class _PlaceDetailsSheetState extends State<PlaceDetailsSheet> {
                     ),
                   ),
                   child: _row(Icons.call_outlined, _place.phone),
+                ),
+              if (saved != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => showShareCard(context, saved),
+                    icon: const Icon(Icons.ios_share, size: 18),
+                    label: const Text('分享回忆'),
+                  ),
                 ),
               if (saved?.note.isNotEmpty == true)
                 Padding(

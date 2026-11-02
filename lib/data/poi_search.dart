@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:latlong2/latlong.dart';
 import '../config.dart';
 import '../models/place.dart';
+import '../models/nearby_category.dart';
 import '../models/poi_category.dart';
 
 class Poi {
@@ -149,6 +150,12 @@ typedef PlaceGeography = ({
 });
 
 class PoiSearchService {
+  // An omitted type defaults to food/services/residences in AMap, excluding sights.
+  static final nearbyTypes = nearbyCategories
+      .map((c) => c.code)
+      .whereType<String>()
+      .where((code) => code.endsWith('0000'))
+      .join('|');
   static final Dio _http = Dio(
     BaseOptions(
       baseUrl: 'https://restapi.amap.com',
@@ -191,7 +198,7 @@ class PoiSearchService {
     await _get('/v3/place/around', {
       'location': '$lng,$lat',
       'radius': radius,
-      'types': ?types,
+      'types': types ?? nearbyTypes,
       'sortrule': 'distance',
       'offset': limit,
       'extensions': 'all',

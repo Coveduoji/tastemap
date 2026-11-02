@@ -34,6 +34,7 @@ class Collection {
     String? note,
     List<String>? images,
     String? visitedStatus,
+    String? createdAt,
     String? updatedAt,
   }) => Collection(
     id: id,
@@ -43,7 +44,7 @@ class Collection {
     note: note ?? this.note,
     images: images ?? this.images,
     visitedStatus: visitedStatus ?? this.visitedStatus,
-    createdAt: createdAt,
+    createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
